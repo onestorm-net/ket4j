@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>net.onestorm.logging</groupId>
+        <groupId>net.onestorm.ket4j</groupId>
         <artifactId>ket4j</artifactId>
         <version>1.0.0</version>
     </parent>
