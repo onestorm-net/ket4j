@@ -24,6 +24,11 @@ straight on `main`:
     specific to any one update.
 - Before merging a `development-<name>` branch back to `main`, always:
   - Run `mvn verify` and fix any coverage gaps back to 100% line coverage.
+  - Bump the version in the root `pom.xml` and both modules' `<parent>` blocks — major for
+    breaking API changes, minor/patch otherwise (semver). Merging to `main` deploys immediately
+    (see CI/CD below); forgetting this silently overwrites the previous release's artifacts under
+    the same version number. CI refuses to deploy over an unchanged version as a backstop, but
+    don't rely on that — decide the right bump deliberately.
   - Update this file's architecture documentation (e.g. "What to Build", package structure) so
     it describes the new design instead of the one the update replaced.
   - Update `README.md` if it shows usage/config examples referencing the changed API.
@@ -271,7 +276,13 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
 
 **On push to `main` only** — `deploy` job runs after `test` passes:
 1. `mvn -U -B -e clean deploy` — builds all modules and stages artifacts to `target/local-repository/` (root of the repo) via `maven-deploy-plugin` `altDeploymentRepository`.
-2. `rsync` pushes the staged repository to the remote Maven server over SSH.
+2. **Refuse-to-overwrite guard** — `rsync -rc --dry-run --existing` against the remote repo; if
+   any staged file already exists there with different content, the job fails before touching the
+   remote server. This is a backstop against deploying without bumping the version (which would
+   otherwise silently overwrite a previously published release's artifacts under the same version
+   number) — it doesn't replace the version-bump step in the Major Update Workflow above, it just
+   catches the case where someone forgets.
+3. `rsync` pushes the staged repository to the remote Maven server over SSH.
 
 ### Required GitHub Actions secrets
 | Secret | Purpose |

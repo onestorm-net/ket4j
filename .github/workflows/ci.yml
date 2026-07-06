@@ -47,5 +47,15 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: ${{ secrets.SSH_KNOWN_HOST }}
 
+      - name: Refuse to overwrite already-published artifacts
+        run: |
+          CONFLICTS=$(rsync -rc --dry-run --existing --out-format='%n' target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/)
+          if [ -n "$CONFLICTS" ]; then
+            echo "Refusing to deploy: these files already exist on the remote repo with different content:"
+            echo "$CONFLICTS"
+            echo "Bump the project version in pom.xml before merging/deploying."
+            exit 1
+          fi
+
       - name: Sync to Maven repository
         run: rsync -r --quiet target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/
