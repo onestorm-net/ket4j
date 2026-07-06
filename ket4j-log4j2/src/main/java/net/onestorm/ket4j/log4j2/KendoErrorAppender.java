@@ -42,8 +42,7 @@ public class KendoErrorAppender extends AbstractAppender {
             if (!event.getLevel().isMoreSpecificThan(Level.WARN)) {
                 return;
             }
-            String message = event.getMessage().getFormattedMessage();
-            ErrorTrackerProvider.getInstance().report(event.getThrown(), message);
+            ErrorTrackerProvider.getInstance().report(new Log4j2ErrorEvent(event));
         } catch (Exception e) {
             LOGGER.error("KendoErrorAppender failed to append event", e);
         }

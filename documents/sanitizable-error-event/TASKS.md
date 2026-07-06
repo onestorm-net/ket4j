@@ -44,9 +44,11 @@ Work through in order. See `DECISIONS.md` for the rationale behind each of these
 
 ## 4. ket4j-log4j2
 
-- [ ] 4.1 Implement `Log4j2ErrorEvent implements ErrorEvent`, wrapping a Log4j2 `LogEvent`
+- [x] 4.1 Implement `Log4j2ErrorEvent implements ErrorEvent`, wrapping a Log4j2 `LogEvent`
       (message + throwable), using core's `ExceptionUtil` for
       `exceptionMessage`/`stackTrace`.
-- [ ] 4.2 Update `KendoErrorAppender` to build a `Log4j2ErrorEvent` from the incoming `LogEvent`
+- [x] 4.2 Update `KendoErrorAppender` to build a `Log4j2ErrorEvent` from the incoming `LogEvent`
       and call `ErrorTrackerProvider.getInstance().report(event)`.
-- [ ] 4.3 Update `KendoErrorAppender` tests for the new event-based flow.
+- [x] 4.3 `KendoErrorAppenderTest` needed no changes — it exercises `append()` as a black box and
+      already passed unchanged. Added a dedicated `Log4j2ErrorEventTest` instead, matching this
+      project's one-test-class-per-production-class convention.
