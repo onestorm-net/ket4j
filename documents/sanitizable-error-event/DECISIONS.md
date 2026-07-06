@@ -17,10 +17,25 @@ logger modules integrate with it.
 ## Decisions
 
 1. **Split fields, not one blob.** The event exposes three independent text fields — `message`
-   (what the developer logged), `exceptionMessage` (derived from the throwable), and
-   `stackTrace` (rendered from the throwable) — each individually gettable/settable. This
-   preserves today's message-pass/stack-trace-pass distinction and lets sanitizers target one
-   without touching the others.
+   (what the developer logged), `exceptionMessage` (the top-level throwable's own message, or
+   `""` if none/null), and `stackTrace` (the full rendered throwable text — header, frames, and
+   the entire `Caused by:` chain, same shape `printStackTrace()` produces today) — each
+   individually gettable/settable. This preserves today's message-pass/stack-trace-pass
+   distinction and lets sanitizers target one without touching the others.
+
+   `exceptionMessage` only reflects the *top-level* throwable — Java exceptions can have a cause
+   chain, each link with its own message, and modelling that fully (e.g. a list of per-cause
+   messages) would be over-engineering for what this update needs. `stackTrace` already contains
+   every message in the chain (each cause renders its own header line), so generic regex
+   sanitizers scanning `stackTrace` as a whole already catch secrets anywhere in the chain — that
+   part isn't a gap. `exceptionMessage` exists purely so a sanitizer can reason about "the
+   exception's own message" without regexing into `stackTrace`'s embedded header line.
+   Sanitizers that need the full chain (e.g. `SqlExceptionSanitizer`, walking causes for a
+   `SQLException`) still do so via `event.getThrowable()`, exactly like today — `exceptionMessage`
+   doesn't replace that.
+
+   Importantly: **only `stackTrace` is transmitted** — the wire API has one `stack_trace` field
+   (see decision 5's `SqlExceptionSanitizer` note for why this matters).
 
 2. **`Sanitizer` becomes a single mutating method.** Replace both `sanitize(String)` and
    `sanitize(String, Throwable)` with `void sanitize(ErrorEvent event)`. No dual API, no
@@ -42,12 +57,21 @@ logger modules integrate with it.
    `stack_trace`) — is renamed to `ErrorEventPayload`. `ErrorTracker` builds an `ErrorEventPayload`
    from the (now sanitized) `ErrorEvent` right before sending.
 
-5. **`SqlExceptionSanitizer` replaces `exceptionMessage` only, not `message`.** Today it wipes
-   the entire log message when a `SQLException` is found in the chain, because the "message" it
-   operated on was the log message. With the fields split, that scope narrows: it now overwrites
-   only `exceptionMessage` with `ExceptionClass [SQLSTATE x] [error code y]`. The log message a
-   developer wrote (e.g. `"Failed to save user"`) is left alone, since it doesn't inherently leak
-   SQL text — only the exception's own message does.
+5. **`SqlExceptionSanitizer` no longer touches `message`, and now also scrubs `stackTrace` — a
+   real behavior fix, not just a rename.** Today it wipes the entire log message when a
+   `SQLException` is found in the chain, and is a no-op on the stack trace text (its
+   string-only `sanitize(String)` override just returns the input unchanged) — so a SQL
+   exception's message, which can embed the statement or bound values, ships untouched inside
+   `Caused by: java.sql.SQLException: ...` in the stack trace. That's a pre-existing gap.
+
+   With the new model: it leaves the developer's `message` alone entirely (it never leaked SQL
+   text — only the exception's own message does), and instead:
+   - sets `exceptionMessage` to `ExceptionClass [SQLSTATE x] [error code y]`, and
+   - replaces every occurrence of the found `SQLException`'s original message text inside
+     `stackTrace` with that same synthetic string, before `stackTrace` is transmitted.
+
+   This closes the leak instead of just relocating which field the (still-transmitted) SQL text
+   lives in.
 
 6. **`ErrorTracker.report` takes an `ErrorEvent`.** Signature changes from
    `report(Throwable throwable, String message)` to `report(ErrorEvent event)`. Sanitization
