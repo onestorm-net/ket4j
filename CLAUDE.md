@@ -291,12 +291,14 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
 
 **On push to `main` only** — `deploy` job runs after `test` passes:
 1. `mvn -U -B -e clean deploy` — builds all modules and stages artifacts to `target/local-repository/` (root of the repo) via `maven-deploy-plugin` `altDeploymentRepository`.
-2. **Refuse-to-overwrite guard** — `rsync -rc --dry-run --existing` against the remote repo; if
-   any staged file already exists there with different content, the job fails before touching the
-   remote server. This is a backstop against deploying without bumping the version (which would
-   otherwise silently overwrite a previously published release's artifacts under the same version
-   number) — it doesn't replace the version-bump step in the Major Update Workflow above, it just
-   catches the case where someone forgets.
+2. **Refuse-to-overwrite guard** — `rsync -rc --dry-run --existing` against the remote repo,
+   excluding `maven-metadata.xml*` (those are meant to change on every deploy — they list all
+   published versions, not a specific version's artifacts). If any *other* staged file already
+   exists remotely with different content, the job fails before touching the remote server. This
+   is a backstop against deploying without bumping the version (which would otherwise silently
+   overwrite a previously published release's artifacts under the same version number) — it
+   doesn't replace the version-bump step in the Major Update Workflow above, it just catches the
+   case where someone forgets.
 3. `rsync` pushes the staged repository to the remote Maven server over SSH.
 
 **On push to `development` only** — `deploy-development` job runs after `test` passes, mirroring

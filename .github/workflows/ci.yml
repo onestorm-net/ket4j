@@ -49,7 +49,7 @@ jobs:
 
       - name: Refuse to overwrite already-published artifacts
         run: |
-          CONFLICTS=$(rsync -rc --dry-run --existing --out-format='%n' target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/)
+          CONFLICTS=$(rsync -rc --dry-run --existing --exclude='maven-metadata.xml*' --out-format='%n' target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/)
           if [ -n "$CONFLICTS" ]; then
             echo "Refusing to deploy: these files already exist on the remote repo with different content:"
             echo "$CONFLICTS"
@@ -92,7 +92,7 @@ jobs:
 
       - name: Refuse to overwrite already-published artifacts
         run: |
-          CONFLICTS=$(rsync -rc --dry-run --existing --out-format='%n' target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/)
+          CONFLICTS=$(rsync -rc --dry-run --existing --exclude='maven-metadata.xml*' --out-format='%n' target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/)
           if [ -n "$CONFLICTS" ]; then
             echo "Refusing to deploy: these files already exist on the remote repo with different content:"
             echo "$CONFLICTS"
