@@ -1,5 +1,8 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.ErrorEvent;
+import net.onestorm.ket4j.util.ErrorEventUtil;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -11,7 +14,11 @@ public class BsnSanitizer implements Sanitizer {
     private static final Pattern DIGIT_RUN = Pattern.compile("\\d{9,}");
 
     @Override
-    public String sanitize(String input) {
+    public void sanitize(ErrorEvent event) {
+        ErrorEventUtil.applyToTextFields(event, this::redact);
+    }
+
+    private String redact(String input) {
         return scrubDigitRuns(scrubGrouped(input));
     }
 

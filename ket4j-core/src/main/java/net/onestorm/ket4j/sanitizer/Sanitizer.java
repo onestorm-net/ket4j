@@ -1,12 +1,10 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.ErrorEvent;
+
 @FunctionalInterface
 public interface Sanitizer {
 
-    String sanitize(String input);
-
-    default String sanitize(String input, Throwable throwable) {
-        return sanitize(input);
-    }
+    void sanitize(ErrorEvent event);
 
 }

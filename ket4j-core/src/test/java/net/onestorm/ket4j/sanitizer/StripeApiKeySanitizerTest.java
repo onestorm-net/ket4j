@@ -1,5 +1,6 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.TestErrorEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,16 +17,22 @@ class StripeApiKeySanitizerTest {
         sanitizer = new StripeApiKeySanitizer();
     }
 
+    private String sanitizeMessage(String message) {
+        TestErrorEvent event = new TestErrorEvent(message);
+        sanitizer.sanitize(event);
+        return event.getMessage();
+    }
+
     @Test
     void redactsStripeKey() {
-        assertThat(sanitizer.sanitize("key=sk_live_abcdefghij1234567890"))
+        assertThat(sanitizeMessage("key=sk_live_abcdefghij1234567890"))
                 .isEqualTo("key=[REDACTED:api-key]");
     }
 
     @Test
     void redactsMultipleStripeKeys() {
         String input = "sk_live_aaaaaaaaaa sk_live_bbbbbbbbbb";
-        assertThat(sanitizer.sanitize(input)).isEqualTo("[REDACTED:api-key] [REDACTED:api-key]");
+        assertThat(sanitizeMessage(input)).isEqualTo("[REDACTED:api-key] [REDACTED:api-key]");
     }
 
     @ParameterizedTest
@@ -36,6 +43,6 @@ class StripeApiKeySanitizerTest {
         ""
     })
     void doesNotSanitizeNonMatches(String input) {
-        assertThat(sanitizer.sanitize(input)).isEqualTo(input);
+        assertThat(sanitizeMessage(input)).isEqualTo(input);
     }
 }

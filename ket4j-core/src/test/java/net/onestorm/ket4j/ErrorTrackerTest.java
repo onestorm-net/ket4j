@@ -44,7 +44,7 @@ class ErrorTrackerTest {
     @Test
     void reportSendsCorrectPayload() {
         ErrorTracker tracker = new ErrorTracker(configForMock());
-        tracker.report(new RuntimeException("something broke"), "log message");
+        tracker.report(new TestErrorEvent("log message", new RuntimeException("something broke")));
 
         assertThat(receivedBodies).hasSize(1);
         String body = receivedBodies.get(0);
@@ -63,14 +63,14 @@ class ErrorTrackerTest {
                 .token("token123")
                 .release("2.0.0")
                 .build();
-        new ErrorTracker(config).report(new RuntimeException(), "msg");
+        new ErrorTracker(config).report(new TestErrorEvent("msg", new RuntimeException()));
 
         assertThat(receivedBodies.get(0)).contains("\"release\":\"2.0.0\"");
     }
 
     @Test
     void reportWithNullThrowableUsesNoneAsExceptionClass() {
-        new ErrorTracker(configForMock()).report(null, "warn message");
+        new ErrorTracker(configForMock()).report(new TestErrorEvent("warn message", null));
 
         String body = receivedBodies.get(0);
         assertThat(body).contains("\"exception_class\":\"none\"");
@@ -79,7 +79,7 @@ class ErrorTrackerTest {
 
     @Test
     void reportWithNullMessageSendsEmptyString() {
-        new ErrorTracker(configForMock()).report(new RuntimeException(), null);
+        new ErrorTracker(configForMock()).report(new TestErrorEvent(null, new RuntimeException()));
 
         assertThat(receivedBodies.get(0)).contains("\"message\":\"\"");
     }
@@ -87,7 +87,7 @@ class ErrorTrackerTest {
     @Test
     void reportDoesNotThrowOnNon202Response() {
         responseCode = 500;
-        assertThatCode(() -> new ErrorTracker(configForMock()).report(new RuntimeException(), "msg"))
+        assertThatCode(() -> new ErrorTracker(configForMock()).report(new TestErrorEvent("msg", new RuntimeException())))
                 .doesNotThrowAnyException();
     }
 
@@ -100,26 +100,26 @@ class ErrorTrackerTest {
                 .connectTimeoutSeconds(0.1)
                 .timeoutSeconds(0.1)
                 .build();
-        assertThatCode(() -> new ErrorTracker(config).report(new RuntimeException(), "msg"))
+        assertThatCode(() -> new ErrorTracker(config).report(new TestErrorEvent("msg", new RuntimeException())))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void reportDoesNotThrowWhenSanitizerThrows() {
-        List<Sanitizer> broken = List.of(input -> { throw new RuntimeException("sanitizer failure"); });
+        List<Sanitizer> broken = List.of(event -> { throw new RuntimeException("sanitizer failure"); });
         ErrorTrackerConfiguration config = ErrorTrackerConfiguration.builder()
                 .kendoUrl("http://localhost:" + mockPort)
                 .projectId("proj")
                 .token("tok")
                 .sanitizers(broken)
                 .build();
-        assertThatCode(() -> new ErrorTracker(config).report(new RuntimeException(), "msg"))
+        assertThatCode(() -> new ErrorTracker(config).report(new TestErrorEvent("msg", new RuntimeException())))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void reportEscapesSpecialCharactersInMessage() {
-        new ErrorTracker(configForMock()).report(null, "line1\nline2\r\ttab\"quote\\backslash");
+        new ErrorTracker(configForMock()).report(new TestErrorEvent("line1\nline2\r\ttab\"quote\\backslash", null));
 
         String body = receivedBodies.get(0);
         assertThat(body).contains("line1\\nline2\\r\\ttab\\\"quote\\\\backslash");
@@ -127,7 +127,7 @@ class ErrorTrackerTest {
 
     @Test
     void reportEscapesControlCharactersInMessage() {
-        new ErrorTracker(configForMock()).report(null, "");
+        new ErrorTracker(configForMock()).report(new TestErrorEvent("", null));
 
         String body = receivedBodies.get(0);
         assertThat(body).contains("\\u0001");
@@ -137,7 +137,7 @@ class ErrorTrackerTest {
     @Test
     void reportTruncatesLongMessage() {
         String longMessage = "x".repeat(70_000);
-        new ErrorTracker(configForMock()).report(null, longMessage);
+        new ErrorTracker(configForMock()).report(new TestErrorEvent(longMessage, null));
 
         String body = receivedBodies.get(0);
         assertThat(body).doesNotContain("x".repeat(65_536));
