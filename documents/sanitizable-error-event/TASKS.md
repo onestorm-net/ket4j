@@ -7,7 +7,7 @@ Work through in order. See `DECISIONS.md` for the rationale behind each of these
 - [x] 1.1 Add `ExceptionRenderer` (or similarly named) utility in `net.onestorm.ket4j` that turns
       a `Throwable` into `exceptionMessage`/`stackTrace` strings, so logger-module `ErrorEvent`
       implementations don't duplicate this logic.
-- [ ] 1.2 Rename the existing `ErrorEvent` record (JSON payload) to `ErrorEventPayload`.
+- [x] 1.2 Rename the existing `ErrorEvent` record (JSON payload) to `ErrorEventPayload`.
 - [ ] 1.3 Add the new `ErrorEvent` interface: `getMessage`/`setMessage`, `getThrowable`
       (read-only), `getExceptionMessage`/`setExceptionMessage`, `getStackTrace`/`setStackTrace`.
 - [ ] 1.4 Change `Sanitizer` to a single `void sanitize(ErrorEvent event)` method; remove

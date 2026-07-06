@@ -51,7 +51,7 @@ public class ErrorTracker {
                 }
             }
 
-            ErrorEvent event = new ErrorEvent(
+            ErrorEventPayload event = new ErrorEventPayload(
                     config.getEnvironment(),
                     config.getRelease(),
                     exceptionClass,
@@ -65,7 +65,7 @@ public class ErrorTracker {
         }
     }
 
-    private void send(ErrorEvent event) {
+    private void send(ErrorEventPayload event) {
         try {
             String url = config.getKendoUrl() + "/api/projects/" + config.getProjectId() + "/error-events";
             String json = buildJson(event);
@@ -88,7 +88,7 @@ public class ErrorTracker {
         }
     }
 
-    private String buildJson(ErrorEvent event) {
+    private String buildJson(ErrorEventPayload event) {
         StringBuilder builder = new StringBuilder("{");
         builder.append("\"environment\":").append(jsonString(truncate(event.environment(), MAX_ENVIRONMENT_LENGTH)));
         if (event.release() != null) {

@@ -1,6 +1,6 @@
 package net.onestorm.ket4j;
 
-public record ErrorEvent(
+public record ErrorEventPayload(
         String environment,
         String release,
         String exceptionClass,
