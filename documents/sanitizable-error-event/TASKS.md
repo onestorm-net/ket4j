@@ -8,7 +8,7 @@ Work through in order. See `DECISIONS.md` for the rationale behind each of these
       a `Throwable` into `exceptionMessage`/`stackTrace` strings, so logger-module `ErrorEvent`
       implementations don't duplicate this logic.
 - [x] 1.2 Rename the existing `ErrorEvent` record (JSON payload) to `ErrorEventPayload`.
-- [ ] 1.3 Add the new `ErrorEvent` interface: `getMessage`/`setMessage`, `getThrowable`
+- [x] 1.3 Add the new `ErrorEvent` interface: `getMessage`/`setMessage`, `getThrowable`
       (read-only), `getExceptionMessage`/`setExceptionMessage`, `getStackTrace`/`setStackTrace`.
 - [ ] 1.4 Change `Sanitizer` to a single `void sanitize(ErrorEvent event)` method; remove
       `sanitize(String)` and `sanitize(String, Throwable)`.
