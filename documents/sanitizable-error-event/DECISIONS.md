@@ -109,3 +109,10 @@ logger modules integrate with it.
   sanitization, before anything reaches `buildJson()`. That made `escapeJson`'s `input == null`
   guard unreachable (every call site is now provably non-null), so it was removed rather than
   left as dead code — surfaced by the 100% line-coverage check failing on that branch.
+- The first PR for this update merged to `main` with the version still at `1.0.0`, so CI's
+  deploy job silently overwrote the previously published `1.0.0` artifacts with this breaking
+  API change under the same version number. No external consumers were affected this time, but
+  it's a real gap: nothing enforced "bump the version before shipping a breaking change." Fixed
+  by (a) bumping the version to `2.0.0` here, and (b) adding a CI guard (`.github/workflows/ci.yml`)
+  that refuses to deploy if it would overwrite an already-published artifact, as a backstop for
+  next time. See CLAUDE.md's Major Update Workflow and CI/CD sections.
