@@ -304,10 +304,13 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
 **On push to `development` only** — `deploy-development` job runs after `test` passes, mirroring
 `deploy` except:
 1. Before building, reads the current `project.version` (`mvn help:evaluate`) and rewrites it to
-   `<version>-BUILD.<github.run_id>` via `mvn versions:set` — `run_id` guarantees a unique
-   version per workflow run, even for repeated pushes of the same commit, so this build-numbered
-   pre-release never collides with a real release and needs no special-case in the
-   refuse-to-overwrite guard. This rewrite is local to the CI checkout — it's never committed.
+   `<version>-BUILD.<github.run_number>` via `mvn versions:set` — short and human-readable
+   (`2.0.0-BUILD.47`) rather than the long, opaque `run_id`. `run_number` is a per-workflow
+   counter shared across every trigger of `ci.yml` (pushes to any branch, all PRs), so development
+   build numbers will have gaps rather than a clean 1, 2, 3, ... — fine for a low-traffic repo, and
+   still guarantees uniqueness so this pre-release never collides with a real release or needs a
+   special case in the refuse-to-overwrite guard. This rewrite is local to the CI checkout — it's
+   never committed.
 2. Same build/guard/rsync steps as `deploy`, publishing the build-numbered version instead.
 
 Every `development` push permanently adds a new version to the repo — there's no cleanup/pruning

@@ -79,7 +79,7 @@ jobs:
       - name: Set build version
         run: |
           BASE_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
-          mvn -B versions:set -DnewVersion="${BASE_VERSION}-BUILD.${{ github.run_id }}" -DgenerateBackupPoms=false
+          mvn -B versions:set -DnewVersion="${BASE_VERSION}-BUILD.${{ github.run_number }}" -DgenerateBackupPoms=false
 
       - name: Build and stage artifacts
         run: mvn -U -B -e clean deploy
