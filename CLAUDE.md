@@ -3,6 +3,19 @@
 Java port of [kendo-error-tracker](https://github.com/script-development/kendo-error-tracker) (PHP/Laravel).
 Sends sanitized exception reports to kendo's ingestion API from Java applications via Log4j2.
 
+## Major Update Workflow
+
+For updates that change a lot of the public API surface, use this pattern instead of working
+straight on `main`:
+
+- Work on a dedicated branch named `development-<fitting-name>`.
+- Create `documents/<fitting-name>/DECISIONS.md` — describes the update: what it is, the goal,
+  the decisions made along the way, and any findings/tradeoffs discovered during implementation.
+  Keep it updated as decisions are actually made, not just written once up front — it's the
+  source of truth for *why* the update ended up the way it did.
+- Create `documents/<fitting-name>/TASKS.md` — derived from the plan for the update; a list of
+  smaller tasks to work through one by one to reach the goal described in `DECISIONS.md`.
+
 ## Modules
 
 | Module | Package | Purpose |
