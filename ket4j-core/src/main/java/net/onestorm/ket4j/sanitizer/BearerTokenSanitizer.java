@@ -1,5 +1,8 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.ErrorEvent;
+import net.onestorm.ket4j.util.ErrorEventUtil;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -12,7 +15,11 @@ public class BearerTokenSanitizer implements Sanitizer {
     );
 
     @Override
-    public String sanitize(String input) {
+    public void sanitize(ErrorEvent event) {
+        ErrorEventUtil.applyToTextFields(event, BearerTokenSanitizer::redact);
+    }
+
+    private static String redact(String input) {
         List<String> tokens = new ArrayList<>();
 
         String result = PATTERN.matcher(input).replaceAll(match -> {

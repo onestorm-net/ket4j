@@ -1,14 +1,12 @@
 package net.onestorm.ket4j;
 
 import net.onestorm.ket4j.sanitizer.Sanitizer;
-import net.onestorm.ket4j.util.ExceptionUtil;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.List;
 import java.util.logging.Logger;
 
 public class ErrorTracker {
@@ -31,26 +29,18 @@ public class ErrorTracker {
                 .build();
     }
 
-    public void report(Throwable throwable, String message) {
+    public void report(ErrorEvent event) {
         try {
-            List<Sanitizer> sanitizers = config.getSanitizers();
-
-            String sanitizedMessage = message != null ? message : "";
-            for (Sanitizer sanitizer : sanitizers) {
-                sanitizedMessage = sanitizer.sanitize(sanitizedMessage, throwable);
+            for (Sanitizer sanitizer : config.getSanitizers()) {
+                sanitizer.sanitize(event);
             }
 
+            Throwable throwable = event.getThrowable();
             String exceptionClass = throwable != null ? throwable.getClass().getName() : null;
+            String message = event.getMessage() != null ? event.getMessage() : "";
+            String stackTrace = event.getStackTrace() != null ? event.getStackTrace() : "";
 
-            String sanitizedStackTrace = null;
-            if (throwable != null) {
-                sanitizedStackTrace = ExceptionUtil.stackTraceOf(throwable);
-                for (Sanitizer sanitizer : sanitizers) {
-                    sanitizedStackTrace = sanitizer.sanitize(sanitizedStackTrace);
-                }
-            }
-
-            send(exceptionClass, sanitizedMessage, sanitizedStackTrace);
+            send(exceptionClass, message, stackTrace);
         } catch (Exception e) {
             LOGGER.warning("ket4j: failed to report error: " + e.getMessage());
         }
@@ -108,9 +98,6 @@ public class ErrorTracker {
     }
 
     private String escapeJson(String input) {
-        if (input == null) {
-            return "";
-        }
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < input.length(); i++) {
             char character = input.charAt(i);

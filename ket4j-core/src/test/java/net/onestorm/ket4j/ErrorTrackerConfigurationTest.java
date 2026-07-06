@@ -133,7 +133,7 @@ class ErrorTrackerConfigurationTest {
 
     @Test
     void customSanitizersListIsUsed() {
-        List<Sanitizer> custom = List.of(input -> input.replace("secret", "[REDACTED]"));
+        List<Sanitizer> custom = List.of(event -> event.setMessage(event.getMessage().replace("secret", "[REDACTED]")));
         ErrorTrackerConfiguration config = ErrorTrackerConfiguration.builder()
                 .kendoUrl("http://kendo.example.com")
                 .projectId("proj")

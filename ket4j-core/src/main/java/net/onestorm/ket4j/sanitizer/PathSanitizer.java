@@ -1,5 +1,8 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.ErrorEvent;
+import net.onestorm.ket4j.util.ErrorEventUtil;
+
 import java.util.regex.Pattern;
 
 public class PathSanitizer implements Sanitizer {
@@ -14,7 +17,11 @@ public class PathSanitizer implements Sanitizer {
     }
 
     @Override
-    public String sanitize(String input) {
+    public void sanitize(ErrorEvent event) {
+        ErrorEventUtil.applyToTextFields(event, this::redact);
+    }
+
+    private String redact(String input) {
         String result = basePath != null ? input.replace(basePath, "") : input;
         result = HOME_USERNAME.matcher(result).replaceAll("/home/[REDACTED:user]/");
         return MAC_USERNAME.matcher(result).replaceAll("/Users/[REDACTED:user]/");

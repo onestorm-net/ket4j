@@ -1,5 +1,6 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.TestErrorEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,6 +17,12 @@ class EmailSanitizerTest {
         sanitizer = new EmailSanitizer();
     }
 
+    private String sanitizeMessage(String message) {
+        TestErrorEvent event = new TestErrorEvent(message);
+        sanitizer.sanitize(event);
+        return event.getMessage();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {
         "user@example.com",
@@ -23,18 +30,18 @@ class EmailSanitizerTest {
         "first.last@company.co.uk"
     })
     void redactsEmails(String email) {
-        assertThat(sanitizer.sanitize(email)).isEqualTo("[REDACTED:email]");
+        assertThat(sanitizeMessage(email)).isEqualTo("[REDACTED:email]");
     }
 
     @Test
     void redactsEmailEmbeddedInText() {
-        assertThat(sanitizer.sanitize("contact admin@example.com for help"))
+        assertThat(sanitizeMessage("contact admin@example.com for help"))
                 .isEqualTo("contact [REDACTED:email] for help");
     }
 
     @Test
     void redactsMultipleEmails() {
-        assertThat(sanitizer.sanitize("a@x.com and b@y.com"))
+        assertThat(sanitizeMessage("a@x.com and b@y.com"))
                 .isEqualTo("[REDACTED:email] and [REDACTED:email]");
     }
 
@@ -46,6 +53,6 @@ class EmailSanitizerTest {
         ""
     })
     void doesNotSanitizeNonMatches(String input) {
-        assertThat(sanitizer.sanitize(input)).isEqualTo(input);
+        assertThat(sanitizeMessage(input)).isEqualTo(input);
     }
 }

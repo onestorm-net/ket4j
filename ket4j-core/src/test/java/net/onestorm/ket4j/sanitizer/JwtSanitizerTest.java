@@ -1,5 +1,6 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.TestErrorEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,22 +17,28 @@ class JwtSanitizerTest {
         sanitizer = new JwtSanitizer();
     }
 
+    private String sanitizeMessage(String message) {
+        TestErrorEvent event = new TestErrorEvent(message);
+        sanitizer.sanitize(event);
+        return event.getMessage();
+    }
+
     @Test
     void redactsJwt() {
         String jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
-        assertThat(sanitizer.sanitize(jwt)).isEqualTo("[REDACTED:jwt]");
+        assertThat(sanitizeMessage(jwt)).isEqualTo("[REDACTED:jwt]");
     }
 
     @Test
     void redactsJwtEmbeddedInLargerString() {
         String input = "token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc123 and more text";
-        assertThat(sanitizer.sanitize(input)).isEqualTo("token=[REDACTED:jwt] and more text");
+        assertThat(sanitizeMessage(input)).isEqualTo("token=[REDACTED:jwt] and more text");
     }
 
     @Test
     void redactsMultipleJwts() {
         String input = "eyJhbGciOiJIUzI1NiJ9.eyJhIn0.aaa eyJhbGciOiJIUzI1NiJ9.eyJiIn0.bbb";
-        assertThat(sanitizer.sanitize(input)).isEqualTo("[REDACTED:jwt] [REDACTED:jwt]");
+        assertThat(sanitizeMessage(input)).isEqualTo("[REDACTED:jwt] [REDACTED:jwt]");
     }
 
     @ParameterizedTest
@@ -42,12 +49,18 @@ class JwtSanitizerTest {
         ""
     })
     void doesNotSanitizeNonMatches(String input) {
-        assertThat(sanitizer.sanitize(input)).isEqualTo(input);
+        assertThat(sanitizeMessage(input)).isEqualTo(input);
     }
 
     @Test
-    void throwableOverloadDelegatesToStringSanitize() {
-        String jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc123";
-        assertThat(sanitizer.sanitize(jwt, new RuntimeException("irrelevant"))).isEqualTo("[REDACTED:jwt]");
+    void redactsJwtInExceptionMessageAndStackTrace() {
+        TestErrorEvent event = new TestErrorEvent("plain message");
+        event.setExceptionMessage("token eyJhbGciOiJIUzI1NiJ9.eyJhIn0.aaa");
+        event.setStackTrace("trace eyJhbGciOiJIUzI1NiJ9.eyJiIn0.bbb");
+
+        sanitizer.sanitize(event);
+
+        assertThat(event.getExceptionMessage()).isEqualTo("token [REDACTED:jwt]");
+        assertThat(event.getStackTrace()).isEqualTo("trace [REDACTED:jwt]");
     }
 }

@@ -1,5 +1,8 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.ErrorEvent;
+import net.onestorm.ket4j.util.ErrorEventUtil;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -11,11 +14,15 @@ public class BsnSanitizer implements Sanitizer {
     private static final Pattern DIGIT_RUN = Pattern.compile("\\d{9,}");
 
     @Override
-    public String sanitize(String input) {
+    public void sanitize(ErrorEvent event) {
+        ErrorEventUtil.applyToTextFields(event, BsnSanitizer::redact);
+    }
+
+    private static String redact(String input) {
         return scrubDigitRuns(scrubGrouped(input));
     }
 
-    private String scrubGrouped(String input) {
+    private static String scrubGrouped(String input) {
         Matcher matcher = GROUPED.matcher(input);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
@@ -27,7 +34,7 @@ public class BsnSanitizer implements Sanitizer {
         return sb.toString();
     }
 
-    private String scrubDigitRuns(String input) {
+    private static String scrubDigitRuns(String input) {
         Matcher matcher = DIGIT_RUN.matcher(input);
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
@@ -38,7 +45,7 @@ public class BsnSanitizer implements Sanitizer {
     }
 
     // Scans left-to-right for non-overlapping 9-digit windows that pass elfproef.
-    private String redactWindows(String digits) {
+    private static String redactWindows(String digits) {
         StringBuilder result = new StringBuilder();
         int pos = 0;
         while (pos <= digits.length() - 9) {
@@ -57,7 +64,7 @@ public class BsnSanitizer implements Sanitizer {
 
     // Dutch eleven-test (elfproef): weights 9..2 for positions 0-7, weight -1 for position 8.
     // Sum must be a non-zero multiple of 11.
-    private boolean isValidBsn(String digits) {
+    private static boolean isValidBsn(String digits) {
         int sum = 0;
         for (int i = 0; i < 8; i++) {
             sum += (9 - i) * (digits.charAt(i) - '0');

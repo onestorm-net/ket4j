@@ -1,5 +1,8 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.ErrorEvent;
+import net.onestorm.ket4j.util.ErrorEventUtil;
+
 import java.util.regex.Pattern;
 
 public class Ipv4Sanitizer implements Sanitizer {
@@ -9,7 +12,11 @@ public class Ipv4Sanitizer implements Sanitizer {
     );
 
     @Override
-    public String sanitize(String input) {
+    public void sanitize(ErrorEvent event) {
+        ErrorEventUtil.applyToTextFields(event, Ipv4Sanitizer::redact);
+    }
+
+    private static String redact(String input) {
         return PATTERN.matcher(input).replaceAll("[REDACTED:ip]");
     }
 }

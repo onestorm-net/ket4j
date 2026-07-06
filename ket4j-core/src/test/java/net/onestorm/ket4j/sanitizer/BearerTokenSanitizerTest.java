@@ -1,5 +1,6 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.TestErrorEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,32 +17,38 @@ class BearerTokenSanitizerTest {
         sanitizer = new BearerTokenSanitizer();
     }
 
+    private String sanitizeMessage(String message) {
+        TestErrorEvent event = new TestErrorEvent(message);
+        sanitizer.sanitize(event);
+        return event.getMessage();
+    }
+
     @Test
     void redactsBearerToken() {
-        assertThat(sanitizer.sanitize("Authorization: Bearer abc123")).isEqualTo("Authorization: [REDACTED:bearer]");
+        assertThat(sanitizeMessage("Authorization: Bearer abc123")).isEqualTo("Authorization: [REDACTED:bearer]");
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"Bearer", "BEARER", "bearer"})
     void isCaseInsensitive(String keyword) {
-        assertThat(sanitizer.sanitize("Authorization: " + keyword + " secrettoken")).isEqualTo("Authorization: [REDACTED:bearer]");
+        assertThat(sanitizeMessage("Authorization: " + keyword + " secrettoken")).isEqualTo("Authorization: [REDACTED:bearer]");
     }
 
     @Test
     void redactsBearerWithTabSeparator() {
-        assertThat(sanitizer.sanitize("Authorization: Bearer\tsecrettoken")).isEqualTo("Authorization: [REDACTED:bearer]");
+        assertThat(sanitizeMessage("Authorization: Bearer\tsecrettoken")).isEqualTo("Authorization: [REDACTED:bearer]");
     }
 
     @Test
     void redactsBareReuseOfToken() {
         String input = "Authorization: Bearer mysecret, also logged: mysecret";
-        assertThat(sanitizer.sanitize(input)).isEqualTo("Authorization: [REDACTED:bearer], also logged: [REDACTED:bearer]");
+        assertThat(sanitizeMessage(input)).isEqualTo("Authorization: [REDACTED:bearer], also logged: [REDACTED:bearer]");
     }
 
     @Test
     void redactsMultipleBearerHeaders() {
         String input = "Bearer token1 Bearer token2";
-        assertThat(sanitizer.sanitize(input)).isEqualTo("[REDACTED:bearer] [REDACTED:bearer]");
+        assertThat(sanitizeMessage(input)).isEqualTo("[REDACTED:bearer] [REDACTED:bearer]");
     }
 
     @ParameterizedTest
@@ -51,6 +58,17 @@ class BearerTokenSanitizerTest {
         ""
     })
     void doesNotSanitizeNonMatches(String input) {
-        assertThat(sanitizer.sanitize(input)).isEqualTo(input);
+        assertThat(sanitizeMessage(input)).isEqualTo(input);
+    }
+
+    @Test
+    void doesNotReuseTokenAcrossFields() {
+        TestErrorEvent event = new TestErrorEvent("Authorization: Bearer mysecret");
+        event.setStackTrace("also logged: mysecret");
+
+        sanitizer.sanitize(event);
+
+        assertThat(event.getMessage()).isEqualTo("Authorization: [REDACTED:bearer]");
+        assertThat(event.getStackTrace()).isEqualTo("also logged: mysecret");
     }
 }

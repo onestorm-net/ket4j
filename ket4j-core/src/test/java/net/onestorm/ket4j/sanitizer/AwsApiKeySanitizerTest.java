@@ -1,5 +1,6 @@
 package net.onestorm.ket4j.sanitizer;
 
+import net.onestorm.ket4j.TestErrorEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,16 +17,22 @@ class AwsApiKeySanitizerTest {
         sanitizer = new AwsApiKeySanitizer();
     }
 
+    private String sanitizeMessage(String message) {
+        TestErrorEvent event = new TestErrorEvent(message);
+        sanitizer.sanitize(event);
+        return event.getMessage();
+    }
+
     @Test
     void redactsAwsKey() {
-        assertThat(sanitizer.sanitize("AWS key: AKIAIOSFODNN7EXAMPLE"))
+        assertThat(sanitizeMessage("AWS key: AKIAIOSFODNN7EXAMPLE"))
                 .isEqualTo("AWS key: [REDACTED:api-key]");
     }
 
     @Test
     void redactsMultipleAwsKeys() {
         String input = "AKIAIOSFODNN7EXAMPLE and AKIAI0SOFODNN7EXAMPL";
-        assertThat(sanitizer.sanitize(input)).isEqualTo("[REDACTED:api-key] and [REDACTED:api-key]");
+        assertThat(sanitizeMessage(input)).isEqualTo("[REDACTED:api-key] and [REDACTED:api-key]");
     }
 
     @ParameterizedTest
@@ -36,6 +43,6 @@ class AwsApiKeySanitizerTest {
         ""
     })
     void doesNotSanitizeNonMatches(String input) {
-        assertThat(sanitizer.sanitize(input)).isEqualTo(input);
+        assertThat(sanitizeMessage(input)).isEqualTo(input);
     }
 }

@@ -87,13 +87,13 @@ logger modules integrate with it.
 
 ## Findings
 
-- Regex-based sanitizers (JWT, Bearer, DSN, Stripe, AWS, IPv4, Email, BSN, Path) all need to
-  apply the *same* transform to up to three fields now (`message`, `exceptionMessage`,
-  `stackTrace`) instead of being called once per pass externally. Worth introducing a small
-  shared helper (e.g. a base class or static utility that takes the event and a
-  `String -> String` transform and applies it to all three fields) so each sanitizer doesn't
-  duplicate that plumbing. Not a new sanitizer class — an implementation detail inside
-  `net.onestorm.ket4j.sanitizer` to keep the actual 9 sanitizer classes small.
+- Regex-based sanitizers (JWT, Bearer, DSN, Stripe, AWS, IPv4, Email, BSN, Path — 9 in total)
+  all need to apply the *same* transform to up to three fields now (`message`,
+  `exceptionMessage`, `stackTrace`) instead of being called once per pass externally. Added a
+  shared `net.onestorm.ket4j.util.ErrorEventUtil.applyToTextFields(ErrorEvent, UnaryOperator<String>)`
+  helper so none of the 9 sanitizer classes repeat that plumbing themselves. Null fields are
+  treated as `""` before the transform runs, since `ErrorEvent` implementations aren't
+  guaranteed to normalize nulls themselves.
 - Rendering a `Throwable` into `exceptionMessage`/`stackTrace` strings is logic every logger
   module implementation of `ErrorEvent` needs. To avoid duplicating it in `ket4j-log4j2` and
   later `ket4j-logback`, core exposes a shared `net.onestorm.ket4j.util.ExceptionUtil` (static
@@ -105,3 +105,7 @@ logger modules integrate with it.
 - When `throwable` is null (no exception on the log event), `exceptionMessage` and `stackTrace`
   default to empty string, matching current "empty string when no throwable" API contract
   behavior.
+- `ErrorTracker.report(ErrorEvent)` now normalizes `message`/`stackTrace` to `""` right after
+  sanitization, before anything reaches `buildJson()`. That made `escapeJson`'s `input == null`
+  guard unreachable (every call site is now provably non-null), so it was removed rather than
+  left as dead code — surfaced by the 100% line-coverage check failing on that branch.

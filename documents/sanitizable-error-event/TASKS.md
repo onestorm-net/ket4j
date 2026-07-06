@@ -12,35 +12,35 @@ Work through in order. See `DECISIONS.md` for the rationale behind each of these
       `ErrorTrackerConfiguration` (`environment`/`release`), per DECISIONS.md #4.
 - [x] 1.3 Add the new `ErrorEvent` interface: `getMessage`/`setMessage`, `getThrowable`
       (read-only), `getExceptionMessage`/`setExceptionMessage`, `getStackTrace`/`setStackTrace`.
-- [ ] 1.4 Change `Sanitizer` to a single `void sanitize(ErrorEvent event)` method; remove
+- [x] 1.4 Change `Sanitizer` to a single `void sanitize(ErrorEvent event)` method; remove
       `sanitize(String)` and `sanitize(String, Throwable)`.
-- [ ] 1.5 Add a shared helper for regex-style sanitizers that applies a `String -> String`
-      transform to `message`, `exceptionMessage`, and `stackTrace` on an event, so the 8 regex
+- [x] 1.5 Add a shared helper for regex-style sanitizers that applies a `String -> String`
+      transform to `message`, `exceptionMessage`, and `stackTrace` on an event, so the 9 regex
       sanitizers don't each repeat that plumbing.
 
 ## 2. Core: sanitizer rewrites
 
-- [ ] 2.1 Rewrite `JwtSanitizer` against the new `Sanitizer` signature.
-- [ ] 2.2 Rewrite `BearerTokenSanitizer` against the new `Sanitizer` signature.
-- [ ] 2.3 Rewrite `DsnPasswordSanitizer` against the new `Sanitizer` signature.
-- [ ] 2.4 Rewrite `StripeApiKeySanitizer` against the new `Sanitizer` signature.
-- [ ] 2.5 Rewrite `AwsApiKeySanitizer` against the new `Sanitizer` signature.
-- [ ] 2.6 Rewrite `Ipv4Sanitizer` against the new `Sanitizer` signature.
-- [ ] 2.7 Rewrite `EmailSanitizer` against the new `Sanitizer` signature.
-- [ ] 2.8 Rewrite `BsnSanitizer` against the new `Sanitizer` signature.
-- [ ] 2.9 Rewrite `PathSanitizer` against the new `Sanitizer` signature.
-- [ ] 2.10 Rewrite `SqlExceptionSanitizer` to overwrite `exceptionMessage` only (not `message`),
+- [x] 2.1 Rewrite `JwtSanitizer` against the new `Sanitizer` signature.
+- [x] 2.2 Rewrite `BearerTokenSanitizer` against the new `Sanitizer` signature.
+- [x] 2.3 Rewrite `DsnPasswordSanitizer` against the new `Sanitizer` signature.
+- [x] 2.4 Rewrite `StripeApiKeySanitizer` against the new `Sanitizer` signature.
+- [x] 2.5 Rewrite `AwsApiKeySanitizer` against the new `Sanitizer` signature.
+- [x] 2.6 Rewrite `Ipv4Sanitizer` against the new `Sanitizer` signature.
+- [x] 2.7 Rewrite `EmailSanitizer` against the new `Sanitizer` signature.
+- [x] 2.8 Rewrite `BsnSanitizer` against the new `Sanitizer` signature.
+- [x] 2.9 Rewrite `PathSanitizer` against the new `Sanitizer` signature.
+- [x] 2.10 Rewrite `SqlExceptionSanitizer` to overwrite `exceptionMessage` only (not `message`),
        per DECISIONS.md #5.
-- [ ] 2.11 Update/add unit tests for every rewritten sanitizer (valid matches redacted,
+- [x] 2.11 Update/add unit tests for every rewritten sanitizer (valid matches redacted,
        non-matches left alone, multiple occurrences, edge cases — same coverage bar as before,
        against the new `ErrorEvent`-based signature).
 
 ## 3. Core: ErrorTracker
 
-- [ ] 3.1 Change `ErrorTracker.report(Throwable, String)` to `report(ErrorEvent event)`: run all
+- [x] 3.1 Change `ErrorTracker.report(Throwable, String)` to `report(ErrorEvent event)`: run all
       configured sanitizers' `sanitize(event)` in a single pass, then build the wire JSON directly
       from the sanitized event (see 1.2 / DECISIONS.md #4) and send it.
-- [ ] 3.2 Update `ErrorTracker` tests for the new `report(ErrorEvent)` flow.
+- [x] 3.2 Update `ErrorTracker` tests for the new `report(ErrorEvent)` flow.
 
 ## 4. ket4j-log4j2
 
