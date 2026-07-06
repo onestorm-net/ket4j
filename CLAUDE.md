@@ -175,6 +175,19 @@ formatted message and `Throwable` from the event, and uses core's `ExceptionUtil
 - Wraps in try/catch — appender must never throw
 - Configured via Log4j2 XML (standard `@Plugin` + `@PluginFactory`)
 
+**Plugin discovery requires the Log4j2 annotation processor to actually run at compile time.**
+`ket4j-log4j2/pom.xml` registers `log4j-core` as a `maven-compiler-plugin`
+`annotationProcessorPath`, which generates
+`META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat` in the jar — that file
+is how Log4j2 finds `@Plugin`-annotated classes like `KendoErrorAppender` declaratively. Without
+it, Log4j2 falls back to (deprecated, unreliable) package scanning and fails with `Appenders
+contains an invalid element or attribute "KendoError"` / `Unable to locate appender "Kendo"`.
+Relying on implicit classpath-based annotation processing doesn't work here — recent javac
+versions (this project targets Java 25) don't reliably run annotation processors found only on
+the compile classpath without an explicit `annotationProcessorPaths` entry.
+`KendoErrorAppenderPluginDiscoveryTest` parses a real XML config with `<KendoError/>` and asserts
+it resolves, specifically to catch a regression here.
+
 ## Sanitizer Regex Patterns (from PHP source, PR #14)
 
 ```
