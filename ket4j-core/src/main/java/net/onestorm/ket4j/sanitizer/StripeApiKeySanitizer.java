@@ -11,10 +11,10 @@ public class StripeApiKeySanitizer implements Sanitizer {
 
     @Override
     public void sanitize(ErrorEvent event) {
-        ErrorEventUtil.applyToTextFields(event, StripeApiKeySanitizer::redact);
+        ErrorEventUtil.applyToTextFields(event, this::redact);
     }
 
-    private static String redact(String input) {
+    private String redact(String input) {
         return PATTERN.matcher(input).replaceAll("[REDACTED:api-key]");
     }
 }

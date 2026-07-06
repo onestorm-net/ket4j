@@ -15,10 +15,10 @@ public class DsnPasswordSanitizer implements Sanitizer {
 
     @Override
     public void sanitize(ErrorEvent event) {
-        ErrorEventUtil.applyToTextFields(event, DsnPasswordSanitizer::redact);
+        ErrorEventUtil.applyToTextFields(event, this::redact);
     }
 
-    private static String redact(String input) {
+    private String redact(String input) {
         return PATTERN.matcher(input).replaceAll(match ->
                 Matcher.quoteReplacement(match.group(1)) + "[REDACTED:dsn-password]" + match.group(3)
         );

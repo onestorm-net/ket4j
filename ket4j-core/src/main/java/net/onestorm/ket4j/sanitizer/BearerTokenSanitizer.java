@@ -16,10 +16,10 @@ public class BearerTokenSanitizer implements Sanitizer {
 
     @Override
     public void sanitize(ErrorEvent event) {
-        ErrorEventUtil.applyToTextFields(event, BearerTokenSanitizer::redact);
+        ErrorEventUtil.applyToTextFields(event, this::redact);
     }
 
-    private static String redact(String input) {
+    private String redact(String input) {
         List<String> tokens = new ArrayList<>();
 
         String result = PATTERN.matcher(input).replaceAll(match -> {

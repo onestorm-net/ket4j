@@ -13,10 +13,10 @@ public class JwtSanitizer implements Sanitizer {
 
     @Override
     public void sanitize(ErrorEvent event) {
-        ErrorEventUtil.applyToTextFields(event, JwtSanitizer::redact);
+        ErrorEventUtil.applyToTextFields(event, this::redact);
     }
 
-    private static String redact(String input) {
+    private String redact(String input) {
         return PATTERN.matcher(input).replaceAll("[REDACTED:jwt]");
     }
 }
