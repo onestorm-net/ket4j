@@ -1,11 +1,11 @@
-package net.onestorm.ket4j;
+package net.onestorm.ket4j.util;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
-public final class ExceptionRenderer {
+public final class ExceptionUtil {
 
-    private ExceptionRenderer() {
+    private ExceptionUtil() {
     }
 
     public static String exceptionMessageOf(Throwable throwable) {

@@ -51,11 +51,15 @@ logger modules integrate with it.
    inspect it — e.g. `SqlExceptionSanitizer` checks the exception chain for `SQLException` — but
    don't replace it); `message`, `exceptionMessage`, and `stackTrace` are mutable.
 
-4. **The existing `ErrorEvent` record (JSON payload) is renamed.** The name `ErrorEvent` is
-   claimed by the new sanitizable interface. The current record — the flat 5-field DTO that gets
-   serialized to the API body (`environment`, `release`, `exception_class`, `message`,
-   `stack_trace`) — is renamed to `ErrorEventPayload`. `ErrorTracker` builds an `ErrorEventPayload`
-   from the (now sanitized) `ErrorEvent` right before sending.
+4. **No separate payload class — `ErrorTracker` builds the wire JSON directly.** The old
+   `ErrorEvent` record (the flat 5-field DTO serialized to the API body) is removed rather than
+   renamed. It existed only to carry 5 values from `report()` to the private `send()`/`buildJson()`
+   methods a few lines away on the same object — an intermediate object with one call site isn't
+   worth keeping once the sanitizable `ErrorEvent` interface claims the name. `ErrorTracker`
+   already holds `ErrorTrackerConfiguration` as an instance field, so `environment`/`release` are
+   read from `config` directly inside `buildJson()`/`send()`; `exceptionClass` is derived from
+   `event.getThrowable()`; `message`/`stackTrace` come straight off the sanitized `ErrorEvent`. No
+   object needs to bundle these back together first.
 
 5. **`SqlExceptionSanitizer` no longer touches `message`, and now also scrubs `stackTrace` — a
    real behavior fix, not just a rename.** Today it wipes the entire log message when a
@@ -76,9 +80,10 @@ logger modules integrate with it.
 6. **`ErrorTracker.report` takes an `ErrorEvent`.** Signature changes from
    `report(Throwable throwable, String message)` to `report(ErrorEvent event)`. Sanitization
    becomes a single pass: run every configured sanitizer's `sanitize(event)` in order (each free
-   to touch `message`, `exceptionMessage`, and/or `stackTrace`), then build the
-   `ErrorEventPayload` and send it. The old two-pass split (message pass vs. stack-trace pass) is
-   gone — each sanitizer is now responsible for touching whichever fields are relevant to it.
+   to touch `message`, `exceptionMessage`, and/or `stackTrace`), then build the wire JSON straight
+   from the sanitized event (see decision 4) and send it. The old two-pass split (message pass vs.
+   stack-trace pass) is gone — each sanitizer is now responsible for touching whichever fields are
+   relevant to it.
 
 ## Findings
 
@@ -91,8 +96,9 @@ logger modules integrate with it.
   `net.onestorm.ket4j.sanitizer` to keep the actual 9 sanitizer classes small.
 - Rendering a `Throwable` into `exceptionMessage`/`stackTrace` strings is logic every logger
   module implementation of `ErrorEvent` needs. To avoid duplicating it in `ket4j-log4j2` and
-  later `ket4j-logback`, core should expose a small shared utility (e.g.
-  `ExceptionRenderer.stackTraceOf(Throwable)`) that implementations call from their constructor.
+  later `ket4j-logback`, core exposes a shared `net.onestorm.ket4j.util.ExceptionUtil` (static
+  helpers only — see CLAUDE.md's utility-class convention) that implementations call from their
+  constructor.
 - `exception_class` (for the final payload) is derived straight from `event.getThrowable()`'s
   class name at send time — it isn't part of the sanitizable surface, no sanitizer needs to
   touch it.

@@ -4,10 +4,12 @@ Work through in order. See `DECISIONS.md` for the rationale behind each of these
 
 ## 1. Core: event & sanitizer foundations
 
-- [x] 1.1 Add `ExceptionRenderer` (or similarly named) utility in `net.onestorm.ket4j` that turns
-      a `Throwable` into `exceptionMessage`/`stackTrace` strings, so logger-module `ErrorEvent`
-      implementations don't duplicate this logic.
-- [x] 1.2 Rename the existing `ErrorEvent` record (JSON payload) to `ErrorEventPayload`.
+- [x] 1.1 Add `ExceptionUtil` (util class, `net.onestorm.ket4j.util`) that turns a `Throwable`
+      into `exceptionMessage`/`stackTrace` strings, so logger-module `ErrorEvent` implementations
+      don't duplicate this logic.
+- [x] 1.2 Remove the existing `ErrorEvent` record (JSON payload) — no replacement class needed.
+      `ErrorTracker` builds the wire JSON directly from the sanitized `ErrorEvent` (1.3) plus
+      `ErrorTrackerConfiguration` (`environment`/`release`), per DECISIONS.md #4.
 - [x] 1.3 Add the new `ErrorEvent` interface: `getMessage`/`setMessage`, `getThrowable`
       (read-only), `getExceptionMessage`/`setExceptionMessage`, `getStackTrace`/`setStackTrace`.
 - [ ] 1.4 Change `Sanitizer` to a single `void sanitize(ErrorEvent event)` method; remove
@@ -36,15 +38,14 @@ Work through in order. See `DECISIONS.md` for the rationale behind each of these
 ## 3. Core: ErrorTracker
 
 - [ ] 3.1 Change `ErrorTracker.report(Throwable, String)` to `report(ErrorEvent event)`: run all
-      configured sanitizers' `sanitize(event)` in a single pass, build an `ErrorEventPayload`
-      from the sanitized event, and send it.
-- [ ] 3.2 Update `ErrorTracker` tests for the new `report(ErrorEvent)` flow and
-      `ErrorEventPayload` construction.
+      configured sanitizers' `sanitize(event)` in a single pass, then build the wire JSON directly
+      from the sanitized event (see 1.2 / DECISIONS.md #4) and send it.
+- [ ] 3.2 Update `ErrorTracker` tests for the new `report(ErrorEvent)` flow.
 
 ## 4. ket4j-log4j2
 
 - [ ] 4.1 Implement `Log4j2ErrorEvent implements ErrorEvent`, wrapping a Log4j2 `LogEvent`
-      (message + throwable), using core's `ExceptionRenderer` for
+      (message + throwable), using core's `ExceptionUtil` for
       `exceptionMessage`/`stackTrace`.
 - [ ] 4.2 Update `KendoErrorAppender` to build a `Log4j2ErrorEvent` from the incoming `LogEvent`
       and call `ErrorTrackerProvider.getInstance().report(event)`.
