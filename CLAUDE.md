@@ -177,6 +177,7 @@ Test coverage targets:
 - **No wildcard imports** — always use explicit imports (`import java.util.List`, not `import java.util.*`)
 - **Declare with interfaces** — use the interface type on the left-hand side (`List<String>`, `Map<K,V>`) and the concrete type only on the right (`new ArrayList<>()`, `new HashMap<>()`)
 - **Descriptive variable names** — no `pass1`, `pass2`; name variables by what they hold (`result`, `tokens`, `matcher`)
+- **Utility classes** — a class with only static helper methods is a util class: suffix its name with `Util` (e.g. `ExceptionUtil`, not `ExceptionRenderer`) and place it in a `util` subpackage (e.g. `net.onestorm.ket4j.util`)
 
 ## Maven Conventions
 
