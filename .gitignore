@@ -33,6 +33,3 @@ build/
 ### OS ###
 .DS_Store
 Thumbs.db
-
-### Project ###
-TASKS.md
