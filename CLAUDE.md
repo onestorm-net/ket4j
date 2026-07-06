@@ -67,16 +67,27 @@ Accept: application/json
 - `release` (String, nullable — omit from payload when null)
 - `connectTimeoutSeconds` (double, default 2.0, must be > 0)
 - `timeoutSeconds` (double, default 5.0, must be > 0)
-- `sanitizers` (List<Sanitizer>, default: all five built-in sanitizers in order — see below)
+- `sanitizers` (List<Sanitizer>, default: all nine built-in sanitizers in order — see below)
 
-**`Sanitizer`** — interface with two methods:
-- `String sanitize(String input)` — abstract; string-only transformation (regex sanitizers)
-- `default String sanitize(String input, Throwable throwable)` — throwable-aware overload; default delegates to `sanitize(input)`. Override to access the exception.
+**`ErrorEvent`** — interface for the mutable, sanitizable unit of work. Carries everything a
+logger module knows about one log event:
+- `getMessage()` / `setMessage(String)` — what the developer logged
+- `getThrowable()` — the original throwable, if any; **read-only**, not settable
+- `getExceptionMessage()` / `setExceptionMessage(String)` — the top-level throwable's own message
+  (`""` if none/null)
+- `getStackTrace()` / `setStackTrace(String)` — the full rendered throwable text (header, frames,
+  entire `Caused by:` chain); this is the only one of the three text fields actually transmitted
+- Implemented per logger module: `ket4j-log4j2`'s `Log4j2ErrorEvent` wraps a Log4j2 `LogEvent`;
+  a future `ket4j-logback` module would implement it against its own event type.
+
+**`Sanitizer`** — a single-method functional interface:
+- `void sanitize(ErrorEvent event)` — mutates the event's fields in place; no return value
 
 All sanitizers live in `net.onestorm.ket4j.sanitizer`.
-Eight built-in string sanitizers (in default list):
+Nine built-in regex-based sanitizers (in default list) apply their transform to `message`,
+`exceptionMessage`, and `stackTrace` via the shared `net.onestorm.ket4j.util.ErrorEventUtil`:
 - `JwtSanitizer` — replaces `eyJ<b64>.<b64>.<b64>` with `[REDACTED:jwt]`
-- `BearerTokenSanitizer` — two-pass: replace `Bearer <token>`, then any bare reuse of that credential → `[REDACTED:bearer]`
+- `BearerTokenSanitizer` — two-pass *within a single field*: replace `Bearer <token>`, then any bare reuse of that credential → `[REDACTED:bearer]`
 - `DsnPasswordSanitizer` — strips password from `scheme://user:pass@host` → `scheme://user:[REDACTED:dsn-password]@host`
 - `StripeApiKeySanitizer` — redacts Stripe live secret keys (`sk_live_...`) → `[REDACTED:api-key]`
 - `AwsApiKeySanitizer` — redacts AWS access key IDs (`AKIA...`) → `[REDACTED:api-key]`
@@ -86,20 +97,29 @@ Eight built-in string sanitizers (in default list):
 - `PathSanitizer` — strips a configurable base path prefix; also redacts OS usernames in `/home/<user>/` and `/Users/<user>/` paths → `[REDACTED:user]`
 
 One built-in throwable-aware sanitizer (NOT in default list — opt-in):
-- `SqlExceptionSanitizer` — if the throwable chain contains a `SQLException`, replaces the entire message with `ExceptionClass [SQLSTATE x] [error code y]`, dropping embedded SQL and bound values. Falls back to `"unknown"` if SQLSTATE is absent.
+- `SqlExceptionSanitizer` — if the throwable chain contains a `SQLException`, sets
+  `exceptionMessage` to `ExceptionClass [SQLSTATE x] [error code y]` (falls back to `"unknown"`
+  if SQLSTATE is absent) **and** replaces every occurrence of that `SQLException`'s original
+  message text inside `stackTrace` with the same fingerprint — dropping embedded SQL and bound
+  values from both places. Leaves the developer's `message` untouched.
 
-`ErrorTracker` applies sanitizers in two passes:
-1. **Message pass** — calls `sanitizer.sanitize(message, throwable)` for each sanitizer in order. Throwable-aware sanitizers (like `SqlExceptionSanitizer`) can replace the entire message.
-2. **Stack trace pass** — calls `sanitizer.sanitize(stackTrace)` for each sanitizer in order.
+`ErrorTracker.report(ErrorEvent event)` sanitizes in a single pass: runs every configured
+sanitizer's `sanitize(event)` in order, each free to touch whichever of `message`,
+`exceptionMessage`, and `stackTrace` are relevant to it.
 
 Default sanitizer order: JWT → Bearer → DSN → Stripe → AWS → IPv4 → Email → BSN → Path
 (structured/narrower secrets first to avoid partial leakage into looser patterns)
 
 `PathSanitizer` takes a `basePath` in its constructor. If `basePath` is null/blank, only username redaction runs.
 Users configure which sanitizers to use (and in what order) via `ErrorTrackerConfiguration.sanitizers`.
-The default list includes all eight string sanitizers. `SqlExceptionSanitizer` must be added explicitly by applications that use a database.
+The default list includes all nine regex sanitizers. `SqlExceptionSanitizer` must be added explicitly by applications that use a database.
 
-**`ErrorEvent`** — simple record for the JSON body fields (matches the API endpoint name "error-events").
+**`net.onestorm.ket4j.util`** — static-helper utility classes (see Code Style's utility-class convention):
+- `ExceptionUtil` — turns a `Throwable` into `exceptionMessage`/`stackTrace` strings (`""` when
+  the throwable is null); used by `ErrorEvent` implementations to populate those fields
+- `ErrorEventUtil` — `applyToTextFields(ErrorEvent, UnaryOperator<String>)` applies a transform to
+  `message`, `exceptionMessage`, and `stackTrace` uniformly (nulls treated as `""`); backs the 9
+  regex sanitizers so none of them repeat that plumbing
 
 **`ErrorTrackerProvider`** — static singleton provider:
 ```java
@@ -109,8 +129,13 @@ ErrorTracker tracker = ErrorTrackerProvider.getInstance();         // used by al
 Throws `IllegalStateException` if `getInstance()` called before `initialize()`.
 
 **`ErrorTracker`** — core logic:
-- `void report(Throwable throwable, String message)` — two-pass sanitization (message with throwable context, stack trace string-only), builds `ErrorEvent`, calls `send()`; never throws (swallow-on-failure)
-- `void send(ErrorEvent event)` — private; performs the HTTP POST; never throws
+- `void report(ErrorEvent event)` — single-pass sanitization, builds the wire JSON straight from
+  the sanitized event plus config (no intermediate payload object), calls `send()`; never throws
+  (swallow-on-failure)
+- `void send(String exceptionClass, String message, String stackTrace)` — private; performs the
+  HTTP POST; never throws. `exceptionClass` comes from `event.getThrowable()`'s class name;
+  `environment`/`release` are read from `ErrorTrackerConfiguration` directly inside
+  `send()`/`buildJson()`
 - HTTP client: `java.net.http.HttpClient` (JDK built-in, no extra dep)
 - JSON serialization: manual — private `escapeJson(String)` helper (handle `"`, `\`, `\n`, `\r`, `\t`, control chars); payload is a flat 5-field object, no library needed
 - Timeouts: `connectTimeoutSeconds` and `timeoutSeconds` from config
@@ -119,9 +144,14 @@ Throws `IllegalStateException` if `getInstance()` called before `initialize()`.
 
 ### ket4j-log4j2
 
+**`Log4j2ErrorEvent`** — `ErrorEvent` implementation wrapping a Log4j2 `LogEvent`: extracts the
+formatted message and `Throwable` from the event, and uses core's `ExceptionUtil` to populate
+`exceptionMessage`/`stackTrace`.
+
 **`KendoErrorAppender`** — extends `AbstractAppender`:
-- Acts on `WARN`/`ERROR`/`FATAL` log events that include a `Throwable`
-- Calls `ErrorTrackerProvider.getInstance().report(throwable)`
+- Acts on `WARN`/`ERROR`/`FATAL` log events
+- Builds a `Log4j2ErrorEvent` from the incoming `LogEvent` and calls
+  `ErrorTrackerProvider.getInstance().report(event)`
 - Wraps in try/catch — appender must never throw
 - Configured via Log4j2 XML (standard `@Plugin` + `@PluginFactory`)
 
@@ -149,7 +179,7 @@ of the captured credential value elsewhere in the string.
 - **Swallow-on-failure** — `report()` and `send()` never throw; catch all `Exception`/`Throwable`,
   log via `java.util.logging.Logger` (or `StatusLogger` in log4j2 module), and return.
 - **Never block** — use connect + read timeouts from config; a hung kendo host must not stall the caller.
-- **Sanitize before send** — apply all sanitizers to `message` and `stackTrace` synchronously in `report()`.
+- **Sanitize before send** — run all sanitizers against the `ErrorEvent` synchronously in `report()`, before building the wire JSON.
 - **Missing config short-circuit** — if `kendoUrl`, `projectId`, or `token` is blank, log and skip the POST.
 
 ## Testing
@@ -170,6 +200,12 @@ Test coverage targets:
 - Each sanitizer — valid matches redacted, non-matches left alone, multiple occurrences, edge cases
 - `PathSanitizer` — prefix stripped, pass-through when basePath null/blank
 - `ErrorTrackerConfiguration` builder — blank required fields rejected, defaults applied
+
+`TestErrorEvent` (`ket4j-core/src/test/java/net/onestorm/ket4j/TestErrorEvent.java`) is a shared
+mutable `ErrorEvent` test double — construct with `new TestErrorEvent(message)` or
+`new TestErrorEvent(message, throwable)` (the latter derives `exceptionMessage`/`stackTrace` via
+`ExceptionUtil`, matching what a real logger-module implementation would do). Sanitizer and
+`ErrorTracker` tests both use it rather than each rolling their own `ErrorEvent` implementation.
 
 ## Code Style
 
@@ -207,22 +243,26 @@ ket4j-core/src/main/java/net/onestorm/ket4j/
 ├── ErrorTracker.java
 ├── ErrorTrackerConfiguration.java
 ├── ErrorTrackerProvider.java
-├── ErrorEvent.java
-└── sanitizer/
-    ├── Sanitizer.java              (interface)
-    ├── JwtSanitizer.java
-    ├── BearerTokenSanitizer.java
-    ├── DsnPasswordSanitizer.java
-    ├── StripeApiKeySanitizer.java
-    ├── AwsApiKeySanitizer.java
-    ├── Ipv4Sanitizer.java
-    ├── EmailSanitizer.java
-    ├── BsnSanitizer.java
-    ├── PathSanitizer.java
-    └── SqlExceptionSanitizer.java
+├── ErrorEvent.java              (interface — message/throwable/exceptionMessage/stackTrace)
+├── sanitizer/
+│   ├── Sanitizer.java              (interface — void sanitize(ErrorEvent))
+│   ├── JwtSanitizer.java
+│   ├── BearerTokenSanitizer.java
+│   ├── DsnPasswordSanitizer.java
+│   ├── StripeApiKeySanitizer.java
+│   ├── AwsApiKeySanitizer.java
+│   ├── Ipv4Sanitizer.java
+│   ├── EmailSanitizer.java
+│   ├── BsnSanitizer.java
+│   ├── PathSanitizer.java
+│   └── SqlExceptionSanitizer.java
+└── util/
+    ├── ExceptionUtil.java          (Throwable -> exceptionMessage/stackTrace)
+    └── ErrorEventUtil.java         (applyToTextFields helper for regex sanitizers)
 
 ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
-└── KendoErrorAppender.java
+├── KendoErrorAppender.java
+└── Log4j2ErrorEvent.java        (ErrorEvent implementation wrapping a Log4j2 LogEvent)
 ```
 
 ## CI/CD (`.github/workflows/ci.yml`)
