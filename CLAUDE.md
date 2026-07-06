@@ -8,7 +8,8 @@ Sends sanitized exception reports to kendo's ingestion API from Java application
 For updates that change a lot of the public API surface, use this pattern instead of working
 straight on `main`:
 
-- Work on a dedicated branch named `development-<fitting-name>`.
+- Work on a dedicated branch named `development-<fitting-name>`, branched from `development`
+  (not `main` — see Branching below).
 - Create `documents/<fitting-name>/DECISIONS.md` — describes the update: what it is, the goal,
   the decisions made along the way, and any findings/tradeoffs discovered during implementation.
   Keep it updated as decisions are actually made, not just written once up front — it's the
@@ -22,16 +23,30 @@ straight on `main`:
     required — don't split further than the update actually needs.
   - Don't include a wrap-up/finalization group — that's standing process, covered below, not
     specific to any one update.
-- Before merging a `development-<name>` branch back to `main`, always:
+- Before opening a PR from `development-<name>` back to `development`, always:
   - Run `mvn verify` and fix any coverage gaps back to 100% line coverage.
   - Bump the version in the root `pom.xml` and both modules' `<parent>` blocks — major for
-    breaking API changes, minor/patch otherwise (semver). Merging to `main` deploys immediately
-    (see CI/CD below); forgetting this silently overwrites the previous release's artifacts under
-    the same version number. CI refuses to deploy over an unchanged version as a backstop, but
-    don't rely on that — decide the right bump deliberately.
+    breaking API changes, minor/patch otherwise (semver). This is the version that will
+    eventually ship from `main`; get it right here so it doesn't need revisiting later. CI
+    refuses to deploy over an unchanged version as a backstop, but don't rely on that — decide
+    the right bump deliberately.
   - Update this file's architecture documentation (e.g. "What to Build", package structure) so
     it describes the new design instead of the one the update replaced.
   - Update `README.md` if it shows usage/config examples referencing the changed API.
+
+### Branching: `development-<name>` → `development` → `main`
+
+- `development-<name>` branches PR into `development`, not `main`. Every push to `development`
+  triggers a CI deploy of a build-numbered pre-release (`<version>-BUILD.<run id>`) — see CI/CD
+  below — so a WIP feature can be pulled into a downstream app and tested before it ships for
+  real.
+- `development` PRs into `main` to actually cut a release. Merging to `main` deploys the exact
+  version in `pom.xml` (no build suffix) — it should already be correct from whichever
+  `development-<name>` merge last bumped it.
+- **Lesson learned:** the very first version of this project's `development-<name>` workflow PR'd
+  straight into `main`, and got merged before its version bump landed — silently overwriting a
+  previously published release's artifacts under the same version number. That's exactly what the
+  `development` staging step and the CI refuse-to-overwrite guard now exist to catch.
 
 ## Modules
 
@@ -283,6 +298,19 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
    number) — it doesn't replace the version-bump step in the Major Update Workflow above, it just
    catches the case where someone forgets.
 3. `rsync` pushes the staged repository to the remote Maven server over SSH.
+
+**On push to `development` only** — `deploy-development` job runs after `test` passes, mirroring
+`deploy` except:
+1. Before building, reads the current `project.version` (`mvn help:evaluate`) and rewrites it to
+   `<version>-BUILD.<github.run_id>` via `mvn versions:set` — `run_id` guarantees a unique
+   version per workflow run, even for repeated pushes of the same commit, so this build-numbered
+   pre-release never collides with a real release and needs no special-case in the
+   refuse-to-overwrite guard. This rewrite is local to the CI checkout — it's never committed.
+2. Same build/guard/rsync steps as `deploy`, publishing the build-numbered version instead.
+
+Every `development` push permanently adds a new version to the repo — there's no cleanup/pruning
+mechanism, since this is a flat rsync target rather than a real repository manager with snapshot
+retention. Acceptable for a low-traffic personal repo; revisit if it grows unwieldy.
 
 ### Required GitHub Actions secrets
 | Secret | Purpose |

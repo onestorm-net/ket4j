@@ -59,3 +59,45 @@ jobs:
 
       - name: Sync to Maven repository
         run: rsync -r --quiet target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/
+
+  deploy-development:
+    name: Deploy (development build)
+    if: github.ref == 'refs/heads/development' && github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set build version
+        run: |
+          BASE_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          mvn -B versions:set -DnewVersion="${BASE_VERSION}-BUILD.${{ github.run_id }}" -DgenerateBackupPoms=false
+
+      - name: Build and stage artifacts
+        run: mvn -U -B -e clean deploy
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: ${{ secrets.SSH_KNOWN_HOST }}
+
+      - name: Refuse to overwrite already-published artifacts
+        run: |
+          CONFLICTS=$(rsync -rc --dry-run --existing --out-format='%n' target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/)
+          if [ -n "$CONFLICTS" ]; then
+            echo "Refusing to deploy: these files already exist on the remote repo with different content:"
+            echo "$CONFLICTS"
+            exit 1
+          fi
+
+      - name: Sync to Maven repository
+        run: rsync -r --quiet target/local-repository/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/web/www/repo.onestorm.net/public/repository/maven-public/
