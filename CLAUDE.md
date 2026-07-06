@@ -15,6 +15,18 @@ straight on `main`:
   source of truth for *why* the update ended up the way it did.
 - Create `documents/<fitting-name>/TASKS.md` — derived from the plan for the update; a list of
   smaller tasks to work through one by one to reach the goal described in `DECISIONS.md`.
+  - Number every task so it can be referenced (e.g. "see 2.4"). Group related tasks under a
+    shared prefix (e.g. `2.1`–`2.10` for a batch of sanitizer rewrites) rather than one flat
+    list. Keep the `- [ ]` checkboxes.
+  - Splitting groups per module (core, log4j2, ...) is allowed when it aids clarity, but not
+    required — don't split further than the update actually needs.
+  - Don't include a wrap-up/finalization group — that's standing process, covered below, not
+    specific to any one update.
+- Before merging a `development-<name>` branch back to `main`, always:
+  - Run `mvn verify` and fix any coverage gaps back to 100% line coverage.
+  - Update this file's architecture documentation (e.g. "What to Build", package structure) so
+    it describes the new design instead of the one the update replaced.
+  - Update `README.md` if it shows usage/config examples referencing the changed API.
 
 ## Modules
 
