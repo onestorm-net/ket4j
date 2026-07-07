@@ -31,12 +31,16 @@ public class ErrorTracker {
 
     public void report(ErrorEvent event) {
         try {
+            Throwable throwable = event.getThrowable();
+            if (throwable == null) {
+                return;
+            }
+
             for (Sanitizer sanitizer : config.getSanitizers()) {
                 sanitizer.sanitize(event);
             }
 
-            Throwable throwable = event.getThrowable();
-            String exceptionClass = throwable != null ? throwable.getClass().getName() : null;
+            String exceptionClass = throwable.getClass().getName();
             String message = event.getMessage() != null ? event.getMessage() : "";
             String stackTrace = event.getStackTrace() != null ? event.getStackTrace() : "";
 
@@ -60,9 +64,9 @@ public class ErrorTracker {
                     .POST(HttpRequest.BodyPublishers.ofString(json))
                     .build();
 
-            HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 202) {
-                LOGGER.warning("ket4j: unexpected response status " + response.statusCode());
+                LOGGER.warning("ket4j: unexpected response status " + response.statusCode() + ": " + response.body());
             }
         } catch (Exception e) {
             LOGGER.warning("ket4j: send failed: " + e.getMessage());
@@ -78,8 +82,7 @@ public class ErrorTracker {
         if (release != null) {
             builder.append(",\"release\":").append(jsonString(truncate(release, MAX_RELEASE_LENGTH)));
         }
-        String truncatedExceptionClass = exceptionClass != null ? truncate(exceptionClass, MAX_EXCEPTION_CLASS_LENGTH) : "none";
-        builder.append(",\"exception_class\":").append(jsonString(truncatedExceptionClass));
+        builder.append(",\"exception_class\":").append(jsonString(truncate(exceptionClass, MAX_EXCEPTION_CLASS_LENGTH)));
         builder.append(",\"message\":").append(jsonString(truncate(message, MAX_MESSAGE_LENGTH)));
         builder.append(",\"stack_trace\":").append(jsonString(truncate(stackTrace, MAX_STACK_TRACE_LENGTH)));
         builder.append("}");

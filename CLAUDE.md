@@ -66,14 +66,18 @@ Accept: application/json
 {
   "environment":     "production",        // required
   "release":         "1.2.3",             // optional — omit when unset
-  "exception_class": "java.lang.NullPointerException", // required — empty string when no throwable
+  "exception_class": "java.lang.NullPointerException", // required — always a real FQCN, never empty
   "message":         "...",
-  "stack_trace":     "..."                // required — empty string when no throwable
+  "stack_trace":     "..."                // required — empty string allowed
 }
 
 → 202 Accepted  (only success)
 → anything else  log locally, swallow
 ```
+
+`exception_class` uses Laravel's `required` rule server-side, which rejects `null` **and** empty string —
+there is no accommodation for a throwable-less event. `ErrorTracker.report(ErrorEvent)` therefore skips
+sending entirely when `event.getThrowable()` is null, rather than inventing a placeholder value.
 
 ## What to Build
 
@@ -123,8 +127,9 @@ One built-in throwable-aware sanitizer (NOT in default list — opt-in):
   message text inside `stackTrace` with the same fingerprint — dropping embedded SQL and bound
   values from both places. Leaves the developer's `message` untouched.
 
-`ErrorTracker.report(ErrorEvent event)` sanitizes in a single pass: runs every configured
-sanitizer's `sanitize(event)` in order, each free to touch whichever of `message`,
+`ErrorTracker.report(ErrorEvent event)` first checks `event.getThrowable()`; if null, it returns
+immediately — no sanitization, no HTTP call. Otherwise it sanitizes in a single pass: runs every
+configured sanitizer's `sanitize(event)` in order, each free to touch whichever of `message`,
 `exceptionMessage`, and `stackTrace` are relevant to it.
 
 Default sanitizer order: JWT → Bearer → DSN → Stripe → AWS → IPv4 → Email → BSN → Path
@@ -149,9 +154,10 @@ ErrorTracker tracker = ErrorTrackerProvider.getInstance();         // used by al
 Throws `IllegalStateException` if `getInstance()` called before `initialize()`.
 
 **`ErrorTracker`** — core logic:
-- `void report(ErrorEvent event)` — single-pass sanitization, builds the wire JSON straight from
-  the sanitized event plus config (no intermediate payload object), calls `send()`; never throws
-  (swallow-on-failure)
+- `void report(ErrorEvent event)` — returns immediately if `event.getThrowable()` is null (kendo's
+  `exception_class` is required server-side and never accepts an empty value); otherwise runs
+  single-pass sanitization and builds the wire JSON straight from the sanitized event plus config
+  (no intermediate payload object), calls `send()`; never throws (swallow-on-failure)
 - `void send(String exceptionClass, String message, String stackTrace)` — private; performs the
   HTTP POST; never throws. `exceptionClass` comes from `event.getThrowable()`'s class name;
   `environment`/`release` are read from `ErrorTrackerConfiguration` directly inside
@@ -169,7 +175,15 @@ formatted message and `Throwable` from the event, and uses core's `ExceptionUtil
 `exceptionMessage`/`stackTrace`.
 
 **`KendoErrorAppender`** — extends `AbstractAppender`:
-- Acts on `WARN`/`ERROR`/`FATAL` log events
+- No hardcoded level threshold. `append()` calls the inherited `isFiltered(event)` (from
+  `AbstractFilterable`, which `AbstractAppender` extends) so the `Filter` already accepted via the
+  `@PluginElement("Filter")` factory parameter is actually honored — previously that parameter was
+  accepted but never applied. Users who want a level floor configure a standard Log4j2
+  `<ThresholdFilter level="WARN"/>` (or any other `Filter`) inside `<KendoError>` in their XML
+  config; with no filter attached, every level reaches the appender.
+- Skips events without a `Throwable` before building a `Log4j2ErrorEvent` at all (redundant with
+  `ErrorTracker.report()`'s own null-throwable check, but avoids the pointless work of rendering a
+  stack trace that will never be sent)
 - Builds a `Log4j2ErrorEvent` from the incoming `LogEvent` and calls
   `ErrorTrackerProvider.getInstance().report(event)`
 - Wraps in try/catch — appender must never throw
@@ -214,6 +228,9 @@ of the captured credential value elsewhere in the string.
 - **Never block** — use connect + read timeouts from config; a hung kendo host must not stall the caller.
 - **Sanitize before send** — run all sanitizers against the `ErrorEvent` synchronously in `report()`, before building the wire JSON.
 - **Missing config short-circuit** — if `kendoUrl`, `projectId`, or `token` is blank, log and skip the POST.
+- **No-throwable short-circuit** — `report()` skips entirely (no sanitization, no HTTP call) when
+  `event.getThrowable()` is null. kendo's `exception_class` field is `required` server-side with no
+  allowance for null/empty, so there's no valid payload to send for a throwable-less log event.
 
 ## Testing
 

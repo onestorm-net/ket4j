@@ -61,4 +61,8 @@ ErrorTrackerProvider.initialize(
 </Loggers>
 ```
 
-The appender forwards `WARN`, `ERROR`, and `FATAL` events to kendo. Sensitive data (JWTs, bearer tokens, DSN passwords, Stripe/AWS keys, IPv4 addresses, emails, Dutch BSNs, and file paths) is redacted before sending.
+The appender has no hardcoded level threshold — `<Root level="warn">` above is what keeps it to
+`WARN`/`ERROR`/`FATAL`. To scope it independently of the root logger, attach a standard Log4j2
+`Filter` instead, e.g. `<KendoError name="Kendo"><ThresholdFilter level="WARN"/></KendoError>`.
+Events without an attached exception are always skipped regardless of level, since kendo's
+ingestion API requires a real exception class. Sensitive data (JWTs, bearer tokens, DSN passwords, Stripe/AWS keys, IPv4 addresses, emails, Dutch BSNs, and file paths) is redacted before sending.
