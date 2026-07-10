@@ -23,13 +23,24 @@ mvn verify -pl ket4j-core
 
 ## Usage
 
-**1. Add the dependency**
+**1. Add the Reposilite repository and the dependency**
+
+ket4j isn't published to Maven Central — add the Reposilite repository to your `pom.xml`:
+
+```xml
+<repositories>
+    <repository>
+        <id>onestorm</id>
+        <url>https://repo.onestorm.net/maven-public/</url>
+    </repository>
+</repositories>
+```
 
 ```xml
 <dependency>
     <groupId>net.onestorm.ket4j</groupId>
     <artifactId>ket4j-log4j2</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
