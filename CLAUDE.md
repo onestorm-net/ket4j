@@ -317,7 +317,7 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
 
 ## CI/CD (`.github/workflows/ci.yml`)
 
-**On every push and PR** — `test` job runs `mvn -B -e clean verify`; the build fails if any test fails or JaCoCo line coverage drops below 100%.
+**On push to `main`/`development`, and on PRs targeting `development`** — `test` job runs `mvn -B -e clean verify`; the build fails if any test fails or JaCoCo line coverage drops below 100%. `pull_request` is scoped to `development` only (not `main`): a `development-<name>` → `development` PR needs it since feature branches aren't covered by the `push` trigger, but a `development` → `main` PR doesn't — every commit on `development` already ran `test` via its own `push` trigger, so triggering `pull_request` for `main` too would just rerun the identical commit's tests a second time (GitHub still shows that `push` run's checks on the PR, since checks are keyed by commit SHA, not triggering event).
 
 **On push to `main` only** — `deploy` job runs after `test` passes:
 1. `actions/setup-java` writes a `~/.m2/settings.xml` `<server>` entry for the
