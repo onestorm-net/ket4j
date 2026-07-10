@@ -320,16 +320,12 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
 **On every push and PR** — `test` job runs `mvn -B -e clean verify`; the build fails if any test fails or JaCoCo line coverage drops below 100%.
 
 **On push to `main` only** — `deploy` job runs after `test` passes:
-1. `mvn -U -B -e clean deploy` — builds all modules and stages artifacts to `target/local-repository/` (root of the repo) via `maven-deploy-plugin` `altDeploymentRepository`.
-2. **Refuse-to-overwrite guard** — `rsync -rc --dry-run --existing` against the remote repo,
-   excluding `maven-metadata.xml*` (those are meant to change on every deploy — they list all
-   published versions, not a specific version's artifacts). If any *other* staged file already
-   exists remotely with different content, the job fails before touching the remote server. This
-   is a backstop against deploying without bumping the version (which would otherwise silently
-   overwrite a previously published release's artifacts under the same version number) — it
-   doesn't replace the version-bump step in the Major Update Workflow above, it just catches the
-   case where someone forgets.
-3. `rsync` pushes the staged repository to the remote Maven server over SSH.
+1. `actions/setup-java` writes a `~/.m2/settings.xml` `<server>` entry for the
+   `onestorm` id, sourcing username/password from the `MAVEN_USERNAME`/
+   `MAVEN_PASSWORD` env vars set on the deploy step (`github` / `secrets.REPOSILITE_TOKEN`).
+2. `mvn -U -B -e clean deploy` — builds all modules and deploys straight to the Reposilite
+   `maven-public` repository at `https://repo.onestorm.net/maven-public/` (see
+   `distributionManagement` in the root `pom.xml`). No local staging directory, no rsync.
 
 **On push to `development` only** — `deploy-development` job runs after `test` passes, mirroring
 `deploy` except:
@@ -338,22 +334,26 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
    (`2.0.0-BUILD.47`) rather than the long, opaque `run_id`. `run_number` is a per-workflow
    counter shared across every trigger of `ci.yml` (pushes to any branch, all PRs), so development
    build numbers will have gaps rather than a clean 1, 2, 3, ... — fine for a low-traffic repo, and
-   still guarantees uniqueness so this pre-release never collides with a real release or needs a
-   special case in the refuse-to-overwrite guard. This rewrite is local to the CI checkout — it's
-   never committed.
-2. Same build/guard/rsync steps as `deploy`, publishing the build-numbered version instead.
+   still guarantees uniqueness so this pre-release never collides with a real release. This
+   rewrite is local to the CI checkout — it's never committed.
+2. Same deploy step as `deploy`, publishing the build-numbered version instead.
 
 Every `development` push permanently adds a new version to the repo — there's no cleanup/pruning
-mechanism, since this is a flat rsync target rather than a real repository manager with snapshot
-retention. Acceptable for a low-traffic personal repo; revisit if it grows unwieldy.
+mechanism. Acceptable for a low-traffic personal repo; revisit if it grows unwieldy.
+
+**Overwrite protection** lives on the Reposilite server, not in CI: the `maven-public` repository
+is configured there to reject redeployment of an artifact/version that already exists. `mvn
+deploy` simply fails with an HTTP error if someone forgets the version bump — this replaced the
+old CI-side rsync `--dry-run` guard now that artifacts are deployed straight to Reposilite instead
+of rsynced to a bare directory.
 
 ### Required GitHub Actions secrets
 | Secret | Purpose |
 |---|---|
-| `SSH_PRIVATE_KEY` | Private key for rsync SSH connection |
-| `SSH_KNOWN_HOST` | Known-hosts entry for the target server |
-| `SSH_USER` | SSH username |
-| `SSH_HOST` | SSH hostname |
+| `REPOSILITE_TOKEN` | Password for the `github` user on the Reposilite server (`repo.onestorm.net`), used as `MAVEN_PASSWORD` for `mvn deploy` |
 
 ### Maven deploy plugin
-Declared in parent `<pluginManagement>` (version `3.1.4`). All modules deploy into `${maven.multiModuleProjectDirectory}/target/local-repository` — a single flat directory at the repo root — so rsync only needs one source path.
+Declared in parent `<pluginManagement>` (version `3.1.4`), no extra configuration needed — the
+target repository comes from `distributionManagement` in the root `pom.xml`, which points at the
+Reposilite `onestorm` repository (`https://repo.onestorm.net/maven-public/`). Both release and
+development-build versions deploy into this same repository.
