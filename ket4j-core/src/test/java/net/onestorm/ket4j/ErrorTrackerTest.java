@@ -69,12 +69,10 @@ class ErrorTrackerTest {
     }
 
     @Test
-    void reportWithNullThrowableUsesNoneAsExceptionClass() {
+    void reportSkipsSendWhenThrowableIsNull() {
         new ErrorTracker(configForMock()).report(new TestErrorEvent("warn message", null));
 
-        String body = receivedBodies.get(0);
-        assertThat(body).contains("\"exception_class\":\"none\"");
-        assertThat(body).contains("\"stack_trace\":\"\"");
+        assertThat(receivedBodies).isEmpty();
     }
 
     @Test
@@ -119,7 +117,7 @@ class ErrorTrackerTest {
 
     @Test
     void reportEscapesSpecialCharactersInMessage() {
-        new ErrorTracker(configForMock()).report(new TestErrorEvent("line1\nline2\r\ttab\"quote\\backslash", null));
+        new ErrorTracker(configForMock()).report(new TestErrorEvent("line1\nline2\r\ttab\"quote\\backslash", new RuntimeException()));
 
         String body = receivedBodies.get(0);
         assertThat(body).contains("line1\\nline2\\r\\ttab\\\"quote\\\\backslash");
@@ -127,7 +125,7 @@ class ErrorTrackerTest {
 
     @Test
     void reportEscapesControlCharactersInMessage() {
-        new ErrorTracker(configForMock()).report(new TestErrorEvent("", null));
+        new ErrorTracker(configForMock()).report(new TestErrorEvent("", new RuntimeException()));
 
         String body = receivedBodies.get(0);
         assertThat(body).contains("\\u0001");
@@ -137,7 +135,7 @@ class ErrorTrackerTest {
     @Test
     void reportTruncatesLongMessage() {
         String longMessage = "x".repeat(70_000);
-        new ErrorTracker(configForMock()).report(new TestErrorEvent(longMessage, null));
+        new ErrorTracker(configForMock()).report(new TestErrorEvent(longMessage, new RuntimeException()));
 
         String body = receivedBodies.get(0);
         assertThat(body).doesNotContain("x".repeat(65_536));

@@ -1,7 +1,6 @@
 package net.onestorm.ket4j.log4j2;
 
 import net.onestorm.ket4j.ErrorTrackerProvider;
-import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.Core;
 import org.apache.logging.log4j.core.Filter;
@@ -39,7 +38,7 @@ public class KendoErrorAppender extends AbstractAppender {
     @Override
     public void append(LogEvent event) {
         try {
-            if (!event.getLevel().isMoreSpecificThan(Level.WARN)) {
+            if (isFiltered(event) || event.getThrown() == null) {
                 return;
             }
             ErrorTrackerProvider.getInstance().report(new Log4j2ErrorEvent(event));

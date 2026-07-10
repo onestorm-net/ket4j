@@ -8,7 +8,8 @@ Sends sanitized exception reports to kendo's ingestion API from Java application
 For updates that change a lot of the public API surface, use this pattern instead of working
 straight on `main`:
 
-- Work on a dedicated branch named `development-<fitting-name>`.
+- Work on a dedicated branch named `development-<fitting-name>`, branched from `development`
+  (not `main` — see Branching below).
 - Create `documents/<fitting-name>/DECISIONS.md` — describes the update: what it is, the goal,
   the decisions made along the way, and any findings/tradeoffs discovered during implementation.
   Keep it updated as decisions are actually made, not just written once up front — it's the
@@ -22,11 +23,30 @@ straight on `main`:
     required — don't split further than the update actually needs.
   - Don't include a wrap-up/finalization group — that's standing process, covered below, not
     specific to any one update.
-- Before merging a `development-<name>` branch back to `main`, always:
+- Before opening a PR from `development-<name>` back to `development`, always:
   - Run `mvn verify` and fix any coverage gaps back to 100% line coverage.
+  - Bump the version in the root `pom.xml` and both modules' `<parent>` blocks — major for
+    breaking API changes, minor/patch otherwise (semver). This is the version that will
+    eventually ship from `main`; get it right here so it doesn't need revisiting later. CI
+    refuses to deploy over an unchanged version as a backstop, but don't rely on that — decide
+    the right bump deliberately.
   - Update this file's architecture documentation (e.g. "What to Build", package structure) so
     it describes the new design instead of the one the update replaced.
   - Update `README.md` if it shows usage/config examples referencing the changed API.
+
+### Branching: `development-<name>` → `development` → `main`
+
+- `development-<name>` branches PR into `development`, not `main`. Every push to `development`
+  triggers a CI deploy of a build-numbered pre-release (`<version>-BUILD.<run id>`) — see CI/CD
+  below — so a WIP feature can be pulled into a downstream app and tested before it ships for
+  real.
+- `development` PRs into `main` to actually cut a release. Merging to `main` deploys the exact
+  version in `pom.xml` (no build suffix) — it should already be correct from whichever
+  `development-<name>` merge last bumped it.
+- **Lesson learned:** the very first version of this project's `development-<name>` workflow PR'd
+  straight into `main`, and got merged before its version bump landed — silently overwriting a
+  previously published release's artifacts under the same version number. That's exactly what the
+  `development` staging step and the CI refuse-to-overwrite guard now exist to catch.
 
 ## Modules
 
@@ -46,14 +66,18 @@ Accept: application/json
 {
   "environment":     "production",        // required
   "release":         "1.2.3",             // optional — omit when unset
-  "exception_class": "java.lang.NullPointerException", // required — empty string when no throwable
+  "exception_class": "java.lang.NullPointerException", // required — always a real FQCN, never empty
   "message":         "...",
-  "stack_trace":     "..."                // required — empty string when no throwable
+  "stack_trace":     "..."                // required — empty string allowed
 }
 
 → 202 Accepted  (only success)
 → anything else  log locally, swallow
 ```
+
+`exception_class` uses Laravel's `required` rule server-side, which rejects `null` **and** empty string —
+there is no accommodation for a throwable-less event. `ErrorTracker.report(ErrorEvent)` therefore skips
+sending entirely when `event.getThrowable()` is null, rather than inventing a placeholder value.
 
 ## What to Build
 
@@ -103,8 +127,9 @@ One built-in throwable-aware sanitizer (NOT in default list — opt-in):
   message text inside `stackTrace` with the same fingerprint — dropping embedded SQL and bound
   values from both places. Leaves the developer's `message` untouched.
 
-`ErrorTracker.report(ErrorEvent event)` sanitizes in a single pass: runs every configured
-sanitizer's `sanitize(event)` in order, each free to touch whichever of `message`,
+`ErrorTracker.report(ErrorEvent event)` first checks `event.getThrowable()`; if null, it returns
+immediately — no sanitization, no HTTP call. Otherwise it sanitizes in a single pass: runs every
+configured sanitizer's `sanitize(event)` in order, each free to touch whichever of `message`,
 `exceptionMessage`, and `stackTrace` are relevant to it.
 
 Default sanitizer order: JWT → Bearer → DSN → Stripe → AWS → IPv4 → Email → BSN → Path
@@ -129,9 +154,10 @@ ErrorTracker tracker = ErrorTrackerProvider.getInstance();         // used by al
 Throws `IllegalStateException` if `getInstance()` called before `initialize()`.
 
 **`ErrorTracker`** — core logic:
-- `void report(ErrorEvent event)` — single-pass sanitization, builds the wire JSON straight from
-  the sanitized event plus config (no intermediate payload object), calls `send()`; never throws
-  (swallow-on-failure)
+- `void report(ErrorEvent event)` — returns immediately if `event.getThrowable()` is null (kendo's
+  `exception_class` is required server-side and never accepts an empty value); otherwise runs
+  single-pass sanitization and builds the wire JSON straight from the sanitized event plus config
+  (no intermediate payload object), calls `send()`; never throws (swallow-on-failure)
 - `void send(String exceptionClass, String message, String stackTrace)` — private; performs the
   HTTP POST; never throws. `exceptionClass` comes from `event.getThrowable()`'s class name;
   `environment`/`release` are read from `ErrorTrackerConfiguration` directly inside
@@ -149,11 +175,32 @@ formatted message and `Throwable` from the event, and uses core's `ExceptionUtil
 `exceptionMessage`/`stackTrace`.
 
 **`KendoErrorAppender`** — extends `AbstractAppender`:
-- Acts on `WARN`/`ERROR`/`FATAL` log events
+- No hardcoded level threshold. `append()` calls the inherited `isFiltered(event)` (from
+  `AbstractFilterable`, which `AbstractAppender` extends) so the `Filter` already accepted via the
+  `@PluginElement("Filter")` factory parameter is actually honored — previously that parameter was
+  accepted but never applied. Users who want a level floor configure a standard Log4j2
+  `<ThresholdFilter level="WARN"/>` (or any other `Filter`) inside `<KendoError>` in their XML
+  config; with no filter attached, every level reaches the appender.
+- Skips events without a `Throwable` before building a `Log4j2ErrorEvent` at all (redundant with
+  `ErrorTracker.report()`'s own null-throwable check, but avoids the pointless work of rendering a
+  stack trace that will never be sent)
 - Builds a `Log4j2ErrorEvent` from the incoming `LogEvent` and calls
   `ErrorTrackerProvider.getInstance().report(event)`
 - Wraps in try/catch — appender must never throw
 - Configured via Log4j2 XML (standard `@Plugin` + `@PluginFactory`)
+
+**Plugin discovery requires the Log4j2 annotation processor to actually run at compile time.**
+`ket4j-log4j2/pom.xml` registers `log4j-core` as a `maven-compiler-plugin`
+`annotationProcessorPath`, which generates
+`META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat` in the jar — that file
+is how Log4j2 finds `@Plugin`-annotated classes like `KendoErrorAppender` declaratively. Without
+it, Log4j2 falls back to (deprecated, unreliable) package scanning and fails with `Appenders
+contains an invalid element or attribute "KendoError"` / `Unable to locate appender "Kendo"`.
+Relying on implicit classpath-based annotation processing doesn't work here — recent javac
+versions (this project targets Java 25) don't reliably run annotation processors found only on
+the compile classpath without an explicit `annotationProcessorPaths` entry.
+`KendoErrorAppenderPluginDiscoveryTest` parses a real XML config with `<KendoError/>` and asserts
+it resolves, specifically to catch a regression here.
 
 ## Sanitizer Regex Patterns (from PHP source, PR #14)
 
@@ -181,6 +228,9 @@ of the captured credential value elsewhere in the string.
 - **Never block** — use connect + read timeouts from config; a hung kendo host must not stall the caller.
 - **Sanitize before send** — run all sanitizers against the `ErrorEvent` synchronously in `report()`, before building the wire JSON.
 - **Missing config short-circuit** — if `kendoUrl`, `projectId`, or `token` is blank, log and skip the POST.
+- **No-throwable short-circuit** — `report()` skips entirely (no sanitization, no HTTP call) when
+  `event.getThrowable()` is null. kendo's `exception_class` field is `required` server-side with no
+  allowance for null/empty, so there's no valid payload to send for a throwable-less log event.
 
 ## Testing
 
@@ -267,19 +317,45 @@ ket4j-log4j2/src/main/java/net/onestorm/ket4j/log4j2/
 
 ## CI/CD (`.github/workflows/ci.yml`)
 
-**On every push and PR** — `test` job runs `mvn -B -e clean verify`; the build fails if any test fails or JaCoCo line coverage drops below 100%.
+**On push to `main`/`development`, and on PRs targeting `development`** — `test` job runs `mvn -B -e clean verify`; the build fails if any test fails or JaCoCo line coverage drops below 100%. `pull_request` is scoped to `development` only (not `main`): a `development-<name>` → `development` PR needs it since feature branches aren't covered by the `push` trigger, but a `development` → `main` PR doesn't — every commit on `development` already ran `test` via its own `push` trigger, so triggering `pull_request` for `main` too would just rerun the identical commit's tests a second time (GitHub still shows that `push` run's checks on the PR, since checks are keyed by commit SHA, not triggering event).
+
+Both triggers also set `paths-ignore: ['**.md', 'documents/**']` — a docs-only push/PR skips CI entirely, since nothing there affects `mvn verify` or the deploy. This is safe with the `main` branch protection rule (which requires the `Test` check): GitHub treats a required check whose workflow was skipped by a path filter as passing, not stuck-pending, so a docs-only PR can still merge.
 
 **On push to `main` only** — `deploy` job runs after `test` passes:
-1. `mvn -U -B -e clean deploy` — builds all modules and stages artifacts to `target/local-repository/` (root of the repo) via `maven-deploy-plugin` `altDeploymentRepository`.
-2. `rsync` pushes the staged repository to the remote Maven server over SSH.
+1. `actions/setup-java` writes a `~/.m2/settings.xml` `<server>` entry for the
+   `onestorm` id, sourcing username/password from the `MAVEN_USERNAME`/
+   `MAVEN_PASSWORD` env vars set on the deploy step (`github` / `secrets.REPOSILITE_TOKEN`).
+2. `mvn -U -B -e clean deploy` — builds all modules and deploys straight to the Reposilite
+   `maven-public` repository at `https://repo.onestorm.net/maven-public/` (see
+   `distributionManagement` in the root `pom.xml`). No local staging directory, no rsync.
+
+**On push to `development` only** — `deploy-development` job runs after `test` passes, mirroring
+`deploy` except:
+1. Before building, reads the current `project.version` (`mvn help:evaluate`) and rewrites it to
+   `<version>-BUILD.<github.run_number>` via `mvn versions:set` — short and human-readable
+   (`2.0.0-BUILD.47`) rather than the long, opaque `run_id`. `run_number` is a per-workflow
+   counter shared across every trigger of `ci.yml` (pushes to any branch, all PRs), so development
+   build numbers will have gaps rather than a clean 1, 2, 3, ... — fine for a low-traffic repo, and
+   still guarantees uniqueness so this pre-release never collides with a real release. This
+   rewrite is local to the CI checkout — it's never committed.
+2. Same deploy step as `deploy`, publishing the build-numbered version instead.
+
+Every `development` push permanently adds a new version to the repo — there's no cleanup/pruning
+mechanism. Acceptable for a low-traffic personal repo; revisit if it grows unwieldy.
+
+**Overwrite protection** lives on the Reposilite server, not in CI: the `maven-public` repository
+is configured there to reject redeployment of an artifact/version that already exists. `mvn
+deploy` simply fails with an HTTP error if someone forgets the version bump — this replaced the
+old CI-side rsync `--dry-run` guard now that artifacts are deployed straight to Reposilite instead
+of rsynced to a bare directory.
 
 ### Required GitHub Actions secrets
 | Secret | Purpose |
 |---|---|
-| `SSH_PRIVATE_KEY` | Private key for rsync SSH connection |
-| `SSH_KNOWN_HOST` | Known-hosts entry for the target server |
-| `SSH_USER` | SSH username |
-| `SSH_HOST` | SSH hostname |
+| `REPOSILITE_TOKEN` | Password for the `github` user on the Reposilite server (`repo.onestorm.net`), used as `MAVEN_PASSWORD` for `mvn deploy` |
 
 ### Maven deploy plugin
-Declared in parent `<pluginManagement>` (version `3.1.4`). All modules deploy into `${maven.multiModuleProjectDirectory}/target/local-repository` — a single flat directory at the repo root — so rsync only needs one source path.
+Declared in parent `<pluginManagement>` (version `3.1.4`), no extra configuration needed — the
+target repository comes from `distributionManagement` in the root `pom.xml`, which points at the
+Reposilite `onestorm` repository (`https://repo.onestorm.net/maven-public/`). Both release and
+development-build versions deploy into this same repository.

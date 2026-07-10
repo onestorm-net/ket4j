@@ -4,7 +4,9 @@ import com.sun.net.httpserver.HttpServer;
 import net.onestorm.ket4j.ErrorTrackerConfiguration;
 import net.onestorm.ket4j.ErrorTrackerProvider;
 import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.filter.ThresholdFilter;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
 import org.apache.logging.log4j.message.SimpleMessage;
 import org.junit.jupiter.api.AfterEach;
@@ -61,10 +63,33 @@ class KendoErrorAppenderTest {
     }
 
     @Test
-    void appendSkipsEventBelowWarn() {
+    void appendReportsBelowWarnEventWhenNoFilterConfigured() {
+        // No level filter is hardcoded — without a Filter attached, level doesn't restrict anything.
         initializeProvider();
         KendoErrorAppender appender = KendoErrorAppender.createAppender("test", null, null, false);
-        LogEvent event = buildEvent(Level.INFO, "info message", null);
+        LogEvent event = buildEvent(Level.INFO, "info message", new RuntimeException("info cause"));
+        appender.append(event);
+        assertThat(receivedBodies).hasSize(1);
+    }
+
+    @Test
+    void appendHonorsConfiguredThresholdFilter() {
+        initializeProvider();
+        Filter filter = ThresholdFilter.createFilter(Level.WARN, Filter.Result.NEUTRAL, Filter.Result.DENY);
+        KendoErrorAppender appender = KendoErrorAppender.createAppender("test", filter, null, false);
+
+        appender.append(buildEvent(Level.INFO, "info message", new RuntimeException("info cause")));
+        assertThat(receivedBodies).isEmpty();
+
+        appender.append(buildEvent(Level.WARN, "warn message", new RuntimeException("warn cause")));
+        assertThat(receivedBodies).hasSize(1);
+    }
+
+    @Test
+    void appendSkipsWarnEventWithoutThrowable() {
+        initializeProvider();
+        KendoErrorAppender appender = KendoErrorAppender.createAppender("test", null, null, false);
+        LogEvent event = buildEvent(Level.WARN, "no exception here", null);
         appender.append(event);
         assertThat(receivedBodies).isEmpty();
     }
